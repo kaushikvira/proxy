@@ -2952,44 +2952,62 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   const configPath = getProxyConfigPath();
   let proxyConfig = await loadProxyConfig(configPath, log);
 
-  // Auto-config on startup: detect available auth and set optimal routing
-  const configExists = await fs.promises.access(configPath).then(() => true).catch(() => false);
-  if (!configExists || proxyConfig.routing?.mode === 'auto') {
-    const envAnthropicKey = process.env['ANTHROPIC_API_KEY'];
-    const hasRegularApiKey = !!envAnthropicKey && envAnthropicKey.startsWith('sk-ant-api');
+  // Auto-config on startup: detect available auth and set optimal routing.
+  //
+  // Bug fix: `configExists` was always true because loadConfig() (CLI init) creates
+  // config.json before startProxy() runs. Instead, check whether routing was explicitly
+  // written to the raw file (by the auto-config itself or by the user).
+  // If not, this is a first-run scenario and we should write optimal routing.
+  {
+    let rawFileHasRouting = false;
+    try {
+      const rawData = await fs.promises.readFile(configPath, 'utf8');
+      const rawJson = JSON.parse(rawData) as Record<string, unknown>;
+      rawFileHasRouting = !!(rawJson['routing']);
+    } catch { /* file missing or parse error = treat as first run */ }
 
-    if (hasRegularApiKey) {
-      // Full 3-tier routing with API key
-      console.log('[RelayPlane] Auto-config: ANTHROPIC_API_KEY detected — enabling 3-tier routing (haiku/sonnet/opus)');
-      if (!configExists) {
-        const autoConfig: RelayPlaneProxyConfigFile = {
-          enabled: true,
-          modelOverrides: {},
-          routing: {
-            mode: 'auto',
+    const userConfig = loadUserConfig();
+    const isFirstRun = !rawFileHasRouting || !userConfig.first_run_complete;
+
+    if (isFirstRun || proxyConfig.routing?.mode === 'auto') {
+      const envAnthropicKey = process.env['ANTHROPIC_API_KEY'];
+      const hasRegularApiKey = !!envAnthropicKey && envAnthropicKey.startsWith('sk-ant-api');
+
+      if (hasRegularApiKey) {
+        // Full 3-tier routing with API key
+        console.log('[RelayPlane] Auto-config: ANTHROPIC_API_KEY detected — enabling 3-tier routing (haiku/sonnet/opus)');
+        if (isFirstRun) {
+          // Merge routing into existing config, preserving user fields (device_id, etc.)
+          let existingRaw: Record<string, unknown> = {};
+          try {
+            existingRaw = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+          } catch { /* fresh start, no existing config */ }
+          const autoRouting = {
+            mode: 'complexity',
             cascade: { enabled: false, models: [], escalateOn: 'uncertainty', maxEscalations: 1 },
             complexity: {
               enabled: true,
-              simple: 'claude-haiku-4-5',
+              simple: 'claude-3-5-haiku-latest',
               moderate: 'claude-sonnet-4-6',
               complex: 'claude-opus-4-6',
             },
-          },
-          reliability: proxyConfig.reliability,
-        };
-        await saveProxyConfig(configPath, autoConfig);
-        proxyConfig = await loadProxyConfig(configPath, log);
-        console.log(`[RelayPlane] Auto-config: wrote 3-tier routing config to ${configPath}`);
-      }
-    } else {
-      // No regular API key — OAuth only or no key, skip Haiku
-      if (!configExists) {
-        console.warn('[RelayPlane] ⚠️  No ANTHROPIC_API_KEY set — Haiku routing disabled (OAuth not supported). Set ANTHROPIC_API_KEY to enable 3-tier routing.');
-        const autoConfig: RelayPlaneProxyConfigFile = {
-          enabled: true,
-          modelOverrides: {},
-          routing: {
-            mode: 'auto',
+          };
+          const updatedConfig = { ...existingRaw, routing: autoRouting, first_run_complete: true };
+          await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+          await fs.promises.writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf8');
+          proxyConfig = await loadProxyConfig(configPath, log);
+          console.log(`[RelayPlane] Auto-config: wrote 3-tier routing config to ${configPath}`);
+        }
+      } else {
+        // No regular API key — OAuth only or no Anthropic key; skip Haiku (OAuth not supported for Haiku)
+        if (isFirstRun) {
+          console.warn('[RelayPlane] ⚠️  No ANTHROPIC_API_KEY (sk-ant-api*) — Haiku disabled. Set ANTHROPIC_API_KEY to enable 3-tier routing.');
+          let existingRaw: Record<string, unknown> = {};
+          try {
+            existingRaw = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+          } catch { /* fresh start, no existing config */ }
+          const autoRouting = {
+            mode: 'complexity',
             cascade: { enabled: false, models: [], escalateOn: 'uncertainty', maxEscalations: 1 },
             complexity: {
               enabled: true,
@@ -2997,12 +3015,13 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
               moderate: 'claude-sonnet-4-6',
               complex: 'claude-opus-4-6',
             },
-          },
-          reliability: proxyConfig.reliability,
-        };
-        await saveProxyConfig(configPath, autoConfig);
-        proxyConfig = await loadProxyConfig(configPath, log);
-        console.log(`[RelayPlane] Auto-config: wrote OAuth-safe config to ${configPath} (no Haiku)`);
+          };
+          const updatedConfig = { ...existingRaw, routing: autoRouting, first_run_complete: true };
+          await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+          await fs.promises.writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf8');
+          proxyConfig = await loadProxyConfig(configPath, log);
+          console.log(`[RelayPlane] Auto-config: wrote OAuth-safe config to ${configPath} (no Haiku)`);
+        }
       }
     }
   }
