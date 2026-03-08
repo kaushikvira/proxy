@@ -67,6 +67,7 @@ import { getAlertManager, type AlertsConfig } from './alerts.js';
 import { checkDowngrade, applyDowngradeHeaders, type DowngradeConfig, DEFAULT_DOWNGRADE_CONFIG } from './downgrade.js';
 import { loadAgentRegistry, flushAgentRegistry, trackAgent, extractSystemPromptFromBody, renameAgent, getAgentRegistry, getAgentSummaries, updateAgentCost } from './agent-tracker.js';
 import { getVersionStatus } from './utils/version-status.js';
+import { initNudge, checkAndShowNudge } from './signup-nudge.js';
 const PROXY_VERSION: string = (() => {
   try {
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -334,6 +335,11 @@ function sendCloudTelemetry(
         timestamp: new Date().toISOString(),
       });
     }
+    // Check whether we should show the signup nudge.
+    // Called *after* the event is written so the count includes this request.
+    // Uses setImmediate to guarantee zero added latency on the response path —
+    // the nudge prints to stderr only after the current I/O cycle completes.
+    setImmediate(() => checkAndShowNudge());
   } catch {
     // Telemetry should never break the proxy
   }
@@ -3037,6 +3043,9 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   // Load persistent history from disk
   loadHistoryFromDisk();
   loadAgentRegistry();
+
+  // Check once at startup whether the signup nudge has already been shown
+  initNudge();
 
   // Flush history on shutdown
   const handleShutdown = () => {
