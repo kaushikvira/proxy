@@ -35,7 +35,8 @@ type Provider = CoreProvider
   | 'mistral'
   | 'together'
   | 'fireworks'
-  | 'perplexity';
+  | 'perplexity'
+  | 'ollama';
 import { buildModelNotFoundError } from './utils/model-suggestions.js';
 import { recordTelemetry as recordCloudTelemetry, inferTaskType as inferTelemetryTaskType, estimateCost, queueForUpload } from './telemetry.js';
 import { loadConfig as loadUserConfig, hasValidCredentials, getMeshConfig, getDeviceId, isTelemetryEnabled } from './config.js';
@@ -43,6 +44,23 @@ import { initMeshLayer, type MeshHandle } from './mesh/index.js';
 import { getResponseCache, computeCacheKey, computeAggressiveCacheKey, isDeterministic, responseHasToolCalls, type CacheConfig } from './response-cache.js';
 import { StatsCollector } from './stats.js';
 import { acquireSlot, RateLimitError, configureRateLimiter } from './rate-limiter.js';
+import {
+  type OllamaProviderConfig,
+  checkOllamaHealthCached,
+  clearOllamaHealthCache,
+  shouldRouteToOllama,
+  resolveOllamaModel,
+  forwardToOllama,
+  forwardToOllamaStream,
+  mapCloudModelToOllama,
+  OLLAMA_DEFAULTS,
+} from './ollama.js';
+import {
+  crossProviderCascade,
+  CrossProviderCascadeManager,
+  type CrossProviderCascadeConfig,
+  type CascadeHop,
+} from './cross-provider-cascade.js';
 import { getBudgetManager, type BudgetConfig } from './budget.js';
 import { getAnomalyDetector, type AnomalyConfig } from './anomaly.js';
 import { getAlertManager, type AlertsConfig } from './alerts.js';
@@ -170,6 +188,10 @@ export const DEFAULT_ENDPOINTS: Record<string, ProviderEndpoint> = {
   perplexity: {
     baseUrl: 'https://api.perplexity.ai',
     apiKeyEnv: 'PERPLEXITY_API_KEY',
+  },
+  ollama: {
+    baseUrl: 'http://localhost:11434',
+    apiKeyEnv: 'OLLAMA_API_KEY', // Not actually required, placeholder for consistency
   },
 };
 
@@ -523,6 +545,31 @@ interface RelayPlaneProxyConfigFile {
   alerts?: Partial<AlertsConfig>;
   downgrade?: Partial<DowngradeConfig>;
   dashboard?: { showRequestContent?: boolean };
+  /**
+   * Cross-provider cascade fallback (GH #38).
+   * When a provider returns 429/529/503, retry with the next provider in `providers` list.
+   *
+   * Example:
+   * ```json
+   * { "crossProviderCascade": { "enabled": true, "providers": ["anthropic","openrouter","google"] } }
+   * ```
+   */
+  crossProviderCascade?: Partial<CrossProviderCascadeConfig>;
+  /**
+   * Ollama local model provider configuration.
+   *
+   * Example:
+   * ```json
+   * {
+   *   "ollama": {
+   *     "baseUrl": "http://localhost:11434",
+   *     "models": ["llama3.2", "codestral"],
+   *     "routeWhen": { "complexity": ["simple"] }
+   *   }
+   * }
+   * ```
+   */
+  ollama?: OllamaProviderConfig;
   [key: string]: unknown;
 }
 
@@ -910,6 +957,9 @@ const DEFAULT_PROXY_CONFIG: RelayPlaneProxyConfigFile = {
 
 /** Module-level ref to active proxy config (set during startProxy) */
 let _activeProxyConfig: RelayPlaneProxyConfigFile = {};
+
+/** Module-level ref to active Ollama config (set during startProxy) */
+let _activeOllamaConfig: OllamaProviderConfig | undefined;
 
 function isContentLoggingEnabled(): boolean {
   return _activeProxyConfig.dashboard?.showRequestContent !== false;
@@ -2354,10 +2404,15 @@ function resolveExplicitModel(
     return { provider: 'openrouter', model: modelName };
   }
 
+  // Ollama models: "ollama/llama3.2" or direct model names when Ollama config exists
+  if (modelName.startsWith('ollama/')) {
+    return { provider: 'ollama', model: modelName.slice('ollama/'.length) };
+  }
+
   // Provider-prefixed format: "anthropic/claude-3-5-sonnet-latest"
   if (modelName.includes('/')) {
     const [provider, model] = modelName.split('/');
-    const validProviders: Provider[] = ['openai', 'anthropic', 'google', 'xai', 'openrouter', 'deepseek', 'groq', 'local'];
+    const validProviders: Provider[] = ['openai', 'anthropic', 'google', 'xai', 'openrouter', 'deepseek', 'groq', 'local', 'ollama'];
     if (provider && model && validProviders.includes(provider as Provider)) {
       return { provider: provider as Provider, model };
     }
@@ -2435,6 +2490,62 @@ function checkResponseModelMismatch(
  * Extract a human-readable error message from a provider error payload.
  * Handles Anthropic ({ error: { type, message } }) and OpenAI ({ error: { message } }) formats.
  */
+/**
+ * Convert a native Anthropic messages request body into the OpenAI-compatible
+ * ChatRequest format used by forwardToOpenAICompatible and related helpers.
+ *
+ * This allows cross-provider cascade from Anthropic → OpenRouter (and others)
+ * without losing the original request content. (GH #38)
+ */
+function convertNativeAnthropicBodyToChatRequest(
+  body: Record<string, unknown>,
+  mappedModel: string
+): ChatRequest {
+  const rawMessages = Array.isArray(body['messages'])
+    ? (body['messages'] as Array<Record<string, unknown>>)
+    : [];
+
+  const messages: ChatRequest['messages'] = [];
+
+  // Prepend system message if present
+  if (body['system'] && typeof body['system'] === 'string') {
+    messages.push({ role: 'system', content: body['system'] });
+  } else if (Array.isArray(body['system'])) {
+    // Anthropic structured system (array of {type, text}) — flatten to text
+    const systemText = (body['system'] as Array<{ type?: string; text?: string }>)
+      .filter((b) => b.type === 'text')
+      .map((b) => b.text ?? '')
+      .join('\n');
+    if (systemText) messages.push({ role: 'system', content: systemText });
+  }
+
+  for (const msg of rawMessages) {
+    const role = msg['role'] as string;
+    const content = msg['content'];
+
+    if (typeof content === 'string') {
+      messages.push({ role: role as 'user' | 'assistant', content });
+    } else if (Array.isArray(content)) {
+      // Anthropic content blocks — extract text parts
+      const text = (content as Array<{ type?: string; text?: string }>)
+        .filter((b) => b.type === 'text')
+        .map((b) => b.text ?? '')
+        .join('');
+      messages.push({ role: role as 'user' | 'assistant', content: text });
+    } else {
+      messages.push({ role: role as 'user' | 'assistant', content: String(content ?? '') });
+    }
+  }
+
+  return {
+    model: mappedModel,
+    messages,
+    max_tokens: (body['max_tokens'] as number | undefined) ?? 4096,
+    temperature: body['temperature'] as number | undefined,
+    stream: false,
+  };
+}
+
 function extractProviderErrorMessage(payload: Record<string, unknown>, statusCode?: number): string {
   const err = payload['error'] as Record<string, unknown> | string | undefined;
   if (typeof err === 'string') return err;
@@ -2528,6 +2639,11 @@ function resolveProviderApiKey(
       };
     }
     return { apiKey: envApiKey };
+  }
+
+  // Ollama doesn't need an API key — it's local
+  if (provider === 'ollama') {
+    return { apiKey: 'ollama-local' };
   }
 
   const apiKeyEnv = DEFAULT_ENDPOINTS[provider]?.apiKeyEnv ?? `${provider.toUpperCase()}_API_KEY`;
@@ -2951,6 +3067,16 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
 
     const userConfig = loadUserConfig();
     configureRateLimiter();
+    // ── Cross-provider cascade: configure from proxy config (GH #38) ──
+    if (proxyConfig.crossProviderCascade?.enabled && (proxyConfig.crossProviderCascade.providers?.length ?? 0) > 1) {
+      crossProviderCascade.configure({
+        enabled: true,
+        providers: proxyConfig.crossProviderCascade.providers!,
+        triggerStatuses: proxyConfig.crossProviderCascade.triggerStatuses,
+        modelMapping: proxyConfig.crossProviderCascade.modelMapping,
+      });
+      log(`[CROSS-CASCADE] Enabled. Provider order: ${proxyConfig.crossProviderCascade.providers!.join(' → ')}`);
+    }
     const isFirstRun = !rawFileHasRouting || !userConfig.first_run_complete;
 
     if (isFirstRun || proxyConfig.routing?.mode === 'auto') {
@@ -3011,7 +3137,37 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   }
 
   _activeProxyConfig = proxyConfig;
+  _activeOllamaConfig = proxyConfig.ollama;
   const cooldownManager = new CooldownManager(getCooldownConfig(proxyConfig));
+
+  // === Ollama provider initialization ===
+  if (_activeOllamaConfig?.enabled !== false && _activeOllamaConfig?.models?.length) {
+    const ollamaUrl = _activeOllamaConfig.baseUrl ?? OLLAMA_DEFAULTS.baseUrl;
+    console.log(`[RelayPlane] Ollama provider configured: ${ollamaUrl}`);
+    console.log(`[RelayPlane] Ollama models: ${_activeOllamaConfig.models.join(', ')}`);
+    if (_activeOllamaConfig.routeWhen) {
+      const routeInfo: string[] = [];
+      if (_activeOllamaConfig.routeWhen.complexity?.length) {
+        routeInfo.push(`complexity: ${_activeOllamaConfig.routeWhen.complexity.join(', ')}`);
+      }
+      if (_activeOllamaConfig.routeWhen.taskTypes?.length) {
+        routeInfo.push(`taskTypes: ${_activeOllamaConfig.routeWhen.taskTypes.join(', ')}`);
+      }
+      if (routeInfo.length) {
+        console.log(`[RelayPlane] Ollama routing rules: ${routeInfo.join('; ')}`);
+      }
+    }
+    // Async health check (non-blocking)
+    checkOllamaHealthCached(ollamaUrl).then((health) => {
+      if (health.available) {
+        console.log(`[RelayPlane] ✓ Ollama is online (${health.models.length} models available, ${health.responseTimeMs}ms)`);
+      } else {
+        console.warn(`[RelayPlane] ⚠️  Ollama not available: ${health.error} — will fall back to cloud providers`);
+      }
+    }).catch(() => {
+      console.warn('[RelayPlane] ⚠️  Ollama health check failed — will fall back to cloud providers');
+    });
+  }
 
   // === Startup config validation (Task 4) ===
   try {
@@ -3198,6 +3354,8 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     anomalyDetector.updateConfig({ ...anomalyDetector.getConfig(), ...(proxyConfig.anomaly ?? {}) });
     alertManager.updateConfig({ ...alertManager.getConfig(), ...(proxyConfig.alerts ?? {}) });
     downgradeConfig = { ...DEFAULT_DOWNGRADE_CONFIG, ...(proxyConfig.downgrade ?? {}) };
+    _activeOllamaConfig = proxyConfig.ollama;
+    clearOllamaHealthCache(); // Invalidate cached health on config change
     log(`Reloaded config from ${configPath}`);
   };
 
@@ -3585,6 +3743,8 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
         
         const providers: Array<{ provider: string; status: string; latency: number; successRate: number; lastChecked: string }> = [];
         for (const [name, ep] of Object.entries(DEFAULT_ENDPOINTS)) {
+          // Skip Ollama from normal key-based health check — it's handled separately
+          if (name === 'ollama') continue;
           const hasKey = !!process.env[ep.apiKeyEnv];
           const stats = providerStats[name.toLowerCase()];
           const successRate = stats && stats.total > 0 ? stats.success / stats.total : (hasKey ? 1 : 0);
@@ -3602,6 +3762,20 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
             status,
             latency: 0,
             successRate: Math.round(successRate * 100) / 100,
+            lastChecked: new Date().toISOString(),
+          });
+        }
+
+        // Add Ollama status if configured
+        if (_activeOllamaConfig && _activeOllamaConfig.enabled !== false) {
+          const ollamaStats = providerStats['ollama'];
+          const ollamaSuccessRate = ollamaStats && ollamaStats.total > 0 ? ollamaStats.success / ollamaStats.total : 0;
+          const ollamaHealth = await checkOllamaHealthCached(_activeOllamaConfig.baseUrl);
+          providers.push({
+            provider: 'ollama',
+            status: ollamaHealth.available ? 'healthy' : 'down',
+            latency: ollamaHealth.responseTimeMs ?? 0,
+            successRate: ollamaHealth.available ? (ollamaSuccessRate || 1) : 0,
             lastChecked: new Date().toISOString(),
           });
         }
@@ -3688,6 +3862,22 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     }
 
     // === Mesh stats endpoint ===
+    // === Ollama status endpoint ===
+    if (req.method === 'GET' && pathname === '/v1/ollama/status') {
+      const ollamaBaseUrl = _activeOllamaConfig?.baseUrl ?? OLLAMA_DEFAULTS.baseUrl;
+      const health = await checkOllamaHealthCached(ollamaBaseUrl);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        configured: !!_activeOllamaConfig,
+        enabled: _activeOllamaConfig?.enabled !== false,
+        baseUrl: ollamaBaseUrl,
+        health,
+        routeWhen: _activeOllamaConfig?.routeWhen ?? null,
+        configuredModels: _activeOllamaConfig?.models ?? [],
+      }));
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/v1/mesh/stats') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(meshHandle.getStats()));
@@ -4131,6 +4321,73 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
             if (proxyConfig.reliability?.cooldowns?.enabled) {
               cooldownManager.recordFailure(targetProvider, JSON.stringify(errorPayload));
             }
+
+            // ── Cross-provider cascade for /v1/messages path (GH #38) ──
+            if (
+              !isStreaming &&
+              crossProviderCascade.enabled &&
+              crossProviderCascade.shouldCascade(providerResponse.status)
+            ) {
+              const { result: cascResult, data: cascData } = await crossProviderCascade.execute<Record<string, unknown>>(
+                targetProvider,
+                targetModel || requestedModel,
+                providerResponse.status,
+                async (hop: CascadeHop) => {
+                  const apiKeyResult = resolveProviderApiKey(hop.provider as Provider, ctx, useAnthropicEnvKey);
+                  if (apiKeyResult.error) {
+                    return { status: apiKeyResult.error.status, data: apiKeyResult.error.payload as Record<string, unknown> };
+                  }
+                  // Respect per-provider rate limits before attempting the hop
+                  try {
+                    await acquireSlot('local', hop.model, hop.provider);
+                  } catch {
+                    return { status: 429, data: { error: `Local rate limit for ${hop.provider}` } };
+                  }
+                  // Convert native Anthropic body to ChatRequest for OpenAI-compatible providers
+                  const chatReq = convertNativeAnthropicBodyToChatRequest(requestBody, hop.model);
+                  const hopResult = await executeNonStreamingProviderRequest(
+                    chatReq,
+                    hop.provider as Provider,
+                    hop.model,
+                    apiKeyResult.apiKey,
+                    ctx
+                  );
+                  return { status: hopResult.status, data: hopResult.responseData };
+                },
+                log
+              );
+
+              if (cascResult.success && cascData) {
+                // Cascade succeeded — update provider/model and respond
+                const cascDurationMs = Date.now() - startTime;
+                const cascProvider = cascResult.provider as Provider;
+                const cascModel = cascResult.model;
+                logRequest(
+                  originalModel ?? 'unknown',
+                  cascModel,
+                  cascProvider,
+                  cascDurationMs,
+                  true,
+                  `${routingMode}+cross-cascade`,
+                  undefined,
+                  taskType, complexity
+                );
+                const cascRpHeaders = buildRelayPlaneResponseHeaders(
+                  cascModel, originalModel ?? 'unknown', complexity, cascProvider, `${routingMode}+cross-cascade`
+                );
+                res.writeHead(200, {
+                  'Content-Type': 'application/json',
+                  'X-RelayPlane-Cascade-Provider': cascProvider,
+                  'X-RelayPlane-Cascade-Model': cascModel,
+                  ...cascRpHeaders,
+                });
+                res.end(JSON.stringify(cascData));
+                return;
+              }
+              // All fallbacks exhausted — fall through to original error response
+            }
+            // ── End cross-provider cascade ──
+
             const durationMs = Date.now() - startTime;
             const errMsg = extractProviderErrorMessage(errorPayload, providerResponse.status);
             logRequest(
@@ -4692,6 +4949,21 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       }
     }
 
+    // ── Ollama routing: intercept before cloud dispatch ──
+    if (!useCascade && _activeOllamaConfig && _activeOllamaConfig.enabled !== false) {
+      if (targetProvider === 'ollama' || shouldRouteToOllama(_activeOllamaConfig, complexity, taskType, request.model)) {
+        // Check Ollama availability before routing
+        const ollamaHealth = await checkOllamaHealthCached(_activeOllamaConfig.baseUrl);
+        if (ollamaHealth.available) {
+          targetProvider = 'ollama';
+          targetModel = resolveOllamaModel(targetModel, _activeOllamaConfig);
+          log(`Ollama routing: ${complexity}/${taskType} → ollama/${targetModel}`);
+        } else {
+          log(`Ollama unavailable (${ollamaHealth.error}), falling back to cloud provider`);
+        }
+      }
+    }
+
     if (!useCascade) {
       log(`Routing to: ${targetProvider}/${targetModel}`);
     } else {
@@ -4925,6 +5197,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
           complexity,
           chatAgentFingerprint,
           chatExplicitAgentId,
+          useAnthropicEnvKey, // pass for cross-provider cascade API key resolution (GH #38)
         );
       }
     }
@@ -5067,6 +5340,24 @@ async function executeNonStreamingProviderRequest(
       }
       break;
     }
+    case 'ollama': {
+      const ollamaResult = await forwardToOllama(targetModel, request.messages, {
+        temperature: request.temperature,
+        max_tokens: request.max_tokens,
+        tools: request.tools,
+        baseUrl: _activeOllamaConfig?.baseUrl,
+        timeoutMs: _activeOllamaConfig?.timeoutMs,
+      });
+      if (!ollamaResult.success) {
+        return {
+          responseData: { error: ollamaResult.error },
+          ok: false,
+          status: ollamaResult.error?.status ?? 502,
+        };
+      }
+      responseData = ollamaResult.data!;
+      break;
+    }
     default: {
       providerResponse = await forwardToOpenAI(request, targetModel, apiKey!);
       responseData = (await providerResponse.json()) as Record<string, unknown>;
@@ -5119,6 +5410,44 @@ async function handleStreamingRequest(
       case 'openrouter': case 'deepseek': case 'groq':
         providerResponse = await forwardToOpenAICompatibleStream(request, targetModel, apiKey!);
         break;
+      case 'ollama': {
+        // Ollama streaming uses its own handler that converts NDJSON → SSE
+        const ollamaStream = await forwardToOllamaStream(targetModel, request.messages, {
+          temperature: request.temperature,
+          max_tokens: request.max_tokens,
+          tools: request.tools,
+          baseUrl: _activeOllamaConfig?.baseUrl,
+          timeoutMs: _activeOllamaConfig?.timeoutMs,
+        });
+        if (!ollamaStream.success || !ollamaStream.stream) {
+          const durationMs = Date.now() - startTime;
+          const errMsg = ollamaStream.error?.message ?? 'Ollama stream failed';
+          logRequest(request.model ?? 'unknown', targetModel, targetProvider, durationMs, false, routingMode, undefined, taskType, complexity, undefined, undefined, errMsg, ollamaStream.error?.status);
+          res.writeHead(ollamaStream.error?.status ?? 502, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: ollamaStream.error }));
+          return;
+        }
+        // Write SSE headers and pipe converted stream
+        const relayHeaders = buildRelayPlaneResponseHeaders(targetModel, request.model, complexity, 'ollama', routingMode);
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+          ...relayHeaders,
+        });
+        for await (const chunk of ollamaStream.stream) {
+          res.write(chunk);
+        }
+        const durationMs = Date.now() - startTime;
+        logRequest(request.model ?? 'unknown', targetModel, 'ollama', durationMs, true, routingMode, false, taskType, complexity, agentFingerprint, agentId);
+        updateLastHistoryEntry(0, 0, 0, targetModel, undefined, undefined, agentFingerprint, agentId);
+        if (recordTelemetry) {
+          sendCloudTelemetry(taskType, targetModel, 0, 0, durationMs, true, 0, request.model ?? undefined);
+          meshCapture(targetModel, 'ollama', taskType, 0, 0, 0, durationMs, true);
+        }
+        res.end();
+        return;
+      }
       default:
         providerResponse = await forwardToOpenAIStream(request, targetModel, apiKey!);
     }
@@ -5339,6 +5668,8 @@ async function handleNonStreamingRequest(
   complexity: Complexity = 'simple',
   agentFingerprint?: string,
   agentId?: string,
+  /** Anthropic env API key — required for cross-provider cascade API key resolution (GH #38) */
+  anthropicEnvKeyForCascade?: string,
 ): Promise<void> {
   let responseData: Record<string, unknown>;
 
@@ -5355,16 +5686,70 @@ async function handleNonStreamingRequest(
       if (cooldownsEnabled) {
         cooldownManager.recordFailure(targetProvider, JSON.stringify(responseData));
       }
-      const durationMs = Date.now() - startTime;
-      const nsErrMsg = extractProviderErrorMessage(responseData, result.status);
-      logRequest(request.model ?? 'unknown', targetModel, targetProvider, durationMs, false, routingMode, undefined, taskType, complexity, undefined, undefined, nsErrMsg, result.status);
-      if (recordTelemetry) {
-        sendCloudTelemetry(taskType, targetModel, 0, 0, durationMs, false, 0, request.model ?? undefined);
-        meshCapture(targetModel, targetProvider, taskType, 0, 0, 0, durationMs, false, nsErrMsg);
+
+      // ── Cross-provider cascade (GH #38) ──
+      if (crossProviderCascade.enabled && crossProviderCascade.shouldCascade(result.status)) {
+        const { result: cascResult, data: cascData } = await crossProviderCascade.execute<Record<string, unknown>>(
+          targetProvider,
+          targetModel,
+          result.status,
+          async (hop: CascadeHop) => {
+            const apiKeyResult = resolveProviderApiKey(hop.provider as Provider, ctx, anthropicEnvKeyForCascade);
+            if (apiKeyResult.error) {
+              return { status: apiKeyResult.error.status, data: apiKeyResult.error.payload as Record<string, unknown> };
+            }
+            // Respect per-provider rate limits before attempting the hop
+            try {
+              await acquireSlot('local', hop.model, hop.provider);
+            } catch {
+              // Rate-limited locally — treat as 429 so cascade continues
+              return { status: 429, data: { error: `Local rate limit for ${hop.provider}` } };
+            }
+            const hopResult = await executeNonStreamingProviderRequest(
+              { ...request, model: hop.model },
+              hop.provider as Provider,
+              hop.model,
+              apiKeyResult.apiKey,
+              ctx
+            );
+            return { status: hopResult.status, data: hopResult.responseData };
+          },
+          log
+        );
+
+        if (cascResult.success && cascData) {
+          // Update tracking variables to reflect the actual provider/model used
+          targetProvider = cascResult.provider as Provider;
+          targetModel = cascResult.model;
+          responseData = cascData;
+          // Fall through to success handling below (don't return early)
+        } else {
+          // All fallbacks exhausted — return the primary error
+          const durationMs = Date.now() - startTime;
+          const nsErrMsg = extractProviderErrorMessage(responseData, result.status);
+          logRequest(request.model ?? 'unknown', targetModel, targetProvider, durationMs, false, `${routingMode}+cascade`, undefined, taskType, complexity, undefined, undefined, nsErrMsg, result.status);
+          if (recordTelemetry) {
+            sendCloudTelemetry(taskType, targetModel, 0, 0, durationMs, false, 0, request.model ?? undefined);
+            meshCapture(targetModel, targetProvider, taskType, 0, 0, 0, durationMs, false, nsErrMsg);
+          }
+          res.writeHead(result.status, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(responseData));
+          return;
+        }
+      } else {
+        // No cascade — return error as-is
+        const durationMs = Date.now() - startTime;
+        const nsErrMsg = extractProviderErrorMessage(responseData, result.status);
+        logRequest(request.model ?? 'unknown', targetModel, targetProvider, durationMs, false, routingMode, undefined, taskType, complexity, undefined, undefined, nsErrMsg, result.status);
+        if (recordTelemetry) {
+          sendCloudTelemetry(taskType, targetModel, 0, 0, durationMs, false, 0, request.model ?? undefined);
+          meshCapture(targetModel, targetProvider, taskType, 0, 0, 0, durationMs, false, nsErrMsg);
+        }
+        res.writeHead(result.status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(responseData));
+        return;
       }
-      res.writeHead(result.status, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(responseData));
-      return;
+      // ── End cross-provider cascade ──
     }
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);

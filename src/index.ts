@@ -76,6 +76,28 @@ export type { Logger } from './logger.js';
 // Proxy stats collector (from standalone proxy)
 export { proxyStatsCollector } from './standalone-proxy.js';
 
+// Ollama local model provider
+export {
+  checkOllamaHealth,
+  checkOllamaHealthCached,
+  clearOllamaHealthCache,
+  shouldRouteToOllama,
+  resolveOllamaModel,
+  forwardToOllama,
+  forwardToOllamaStream,
+  convertMessagesToOllama,
+  buildOllamaRequest,
+  convertOllamaResponse,
+  convertOllamaStreamChunk,
+  mapCloudModelToOllama,
+  OLLAMA_DEFAULTS,
+  CLOUD_TO_OLLAMA_MODEL_MAP,
+} from './ollama.js';
+export type {
+  OllamaProviderConfig,
+  OllamaHealthResult,
+} from './ollama.js';
+
 // Re-export core types
 export type { Provider, TaskType } from '@relayplane/core';
 

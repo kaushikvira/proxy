@@ -40,6 +40,38 @@ export interface ProviderConfig {
   rateLimit?: ProviderRateLimitConfig;
 }
 
+/**
+ * Cross-provider cascade configuration (GH #38).
+ *
+ * Example ~/.relayplane/config.json:
+ * ```json
+ * {
+ *   "crossProviderCascade": {
+ *     "enabled": true,
+ *     "providers": ["anthropic", "openrouter", "google"],
+ *     "triggerStatuses": [429, 529, 503]
+ *   }
+ * }
+ * ```
+ */
+export interface CrossProviderCascadeConfigSection {
+  /** Enable cross-provider fallback (default: false). */
+  enabled?: boolean;
+  /**
+   * Ordered list of provider names to attempt.
+   * First entry is the primary; the rest are fallbacks in order.
+   */
+  providers?: string[];
+  /**
+   * HTTP status codes that trigger a cascade. Defaults to [429, 529, 503].
+   */
+  triggerStatuses?: number[];
+  /**
+   * Custom model name overrides: { fromProvider: { toProvider: { model: mappedModel } } }
+   */
+  modelMapping?: Record<string, Record<string, Record<string, string>>>;
+}
+
 export interface RateLimitConfigSection {
   /** Per-model RPM overrides. Keys are model names (e.g. "claude-sonnet-4-6"). */
   models?: Record<string, RateLimitModelConfig>;
@@ -92,6 +124,13 @@ export interface ProxyConfig {
    * ```
    */
   providers?: Record<string, ProviderConfig>;
+
+  /**
+   * Cross-provider cascade fallback (GH #38).
+   * When enabled and a provider returns 429/529/503, the proxy will automatically
+   * retry with the next provider in the `providers` cascade list.
+   */
+  crossProviderCascade?: CrossProviderCascadeConfigSection;
 }
 
 const CONFIG_VERSION = 1;
@@ -391,4 +430,13 @@ export function getRateLimitConfig(): RateLimitConfigSection {
 export function getProviderConfigs(): Record<string, ProviderConfig> {
   const config = loadConfig();
   return config.providers ?? {};
+}
+
+/**
+ * Get cross-provider cascade configuration (GH #38).
+ * Returns the section as-is; callers are responsible for applying defaults.
+ */
+export function getCrossProviderCascadeConfig(): CrossProviderCascadeConfigSection {
+  const config = loadConfig();
+  return config.crossProviderCascade ?? {};
 }
