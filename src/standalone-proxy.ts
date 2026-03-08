@@ -42,7 +42,7 @@ import { loadConfig as loadUserConfig, hasValidCredentials, getMeshConfig, getDe
 import { initMeshLayer, type MeshHandle } from './mesh/index.js';
 import { getResponseCache, computeCacheKey, computeAggressiveCacheKey, isDeterministic, responseHasToolCalls, type CacheConfig } from './response-cache.js';
 import { StatsCollector } from './stats.js';
-import { checkLimit } from './rate-limiter.js';
+import { acquireSlot, RateLimitError, configureRateLimiter } from './rate-limiter.js';
 import { getBudgetManager, type BudgetConfig } from './budget.js';
 import { getAnomalyDetector, type AnomalyConfig } from './anomaly.js';
 import { getAlertManager, type AlertsConfig } from './alerts.js';
@@ -2950,6 +2950,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     } catch { /* file missing or parse error = treat as first run */ }
 
     const userConfig = loadUserConfig();
+    configureRateLimiter();
     const isFirstRun = !rawFileHasRouting || !userConfig.first_run_complete;
 
     if (isFirstRun || proxyConfig.routing?.mode === 'auto') {
@@ -4034,20 +4035,24 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
 
       // ── Rate limit check ──
       const workspaceId = 'local'; // Local proxy uses single workspace
-      const rateLimit = checkLimit(workspaceId, targetModel);
-      if (!rateLimit.allowed) {
-        console.error(`[RATE LIMIT] ${targetModel} limit reached for workspace: ${workspaceId}`);
-        res.writeHead(429, { 
+      try {
+        // Pass targetProvider so per-provider limits are applied and limits don't
+        // cascade across providers (e.g. Anthropic hitting its cap won't block OpenAI).
+        await acquireSlot(workspaceId, targetModel, targetProvider);
+      } catch (err) {
+        const rlErr = err as RateLimitError;
+        console.error(`[RATE LIMIT] ${targetModel}: ${rlErr.message}`);
+        res.writeHead(429, {
           'Content-Type': 'application/json',
-          'Retry-After': String(rateLimit.retryAfter || 60),
-          'X-RelayPlane-RateLimit-Limit': String(rateLimit.limit),
+          'Retry-After': String(rlErr.retryAfter ?? 60),
+          'X-RelayPlane-RateLimit-Limit': String(rlErr.limit),
           'X-RelayPlane-RateLimit-Remaining': '0',
-          'X-RelayPlane-RateLimit-Reset': String(Math.ceil(rateLimit.resetAt / 1000))
+          'X-RelayPlane-RateLimit-Reset': String(Math.ceil(rlErr.resetAt / 1000)),
         });
-        res.end(JSON.stringify({ 
-          error: `Rate limit exceeded for ${targetModel}. Max ${rateLimit.limit} requests per minute.`,
+        res.end(JSON.stringify({
+          error: rlErr.message,
           type: 'rate_limit_exceeded',
-          retry_after: rateLimit.retryAfter || 60
+          retry_after: rlErr.retryAfter ?? 60,
         }));
         return;
       }
@@ -4732,20 +4737,23 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
 
     // ── Rate limit check ──
     const chatWorkspaceId = 'local'; // Local proxy uses single workspace
-    const chatRateLimit = checkLimit(chatWorkspaceId, targetModel);
-    if (!chatRateLimit.allowed) {
-      console.error(`[RATE LIMIT] ${targetModel} limit reached for workspace: ${chatWorkspaceId}`);
-      res.writeHead(429, { 
+    try {
+      // Pass targetProvider so per-provider limits apply and don't cascade across providers.
+      await acquireSlot(chatWorkspaceId, targetModel, targetProvider);
+    } catch (err) {
+      const chatRlErr = err as RateLimitError;
+      console.error(`[RATE LIMIT] ${targetModel}: ${chatRlErr.message}`);
+      res.writeHead(429, {
         'Content-Type': 'application/json',
-        'Retry-After': String(chatRateLimit.retryAfter || 60),
-        'X-RelayPlane-RateLimit-Limit': String(chatRateLimit.limit),
+        'Retry-After': String(chatRlErr.retryAfter ?? 60),
+        'X-RelayPlane-RateLimit-Limit': String(chatRlErr.limit),
         'X-RelayPlane-RateLimit-Remaining': '0',
-        'X-RelayPlane-RateLimit-Reset': String(Math.ceil(chatRateLimit.resetAt / 1000))
+        'X-RelayPlane-RateLimit-Reset': String(Math.ceil(chatRlErr.resetAt / 1000)),
       });
-      res.end(JSON.stringify({ 
-        error: `Rate limit exceeded for ${targetModel}. Max ${chatRateLimit.limit} requests per minute.`,
+      res.end(JSON.stringify({
+        error: chatRlErr.message,
         type: 'rate_limit_exceeded',
-        retry_after: chatRateLimit.retryAfter || 60
+        retry_after: chatRlErr.retryAfter ?? 60,
       }));
       return;
     }

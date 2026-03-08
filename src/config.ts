@@ -21,6 +21,34 @@ export interface MeshConfigSection {
   contribute: boolean;
 }
 
+export interface RateLimitModelConfig {
+  /** Requests per minute for this model */
+  rpm: number;
+}
+
+export interface ProviderRateLimitConfig {
+  /**
+   * Requests per minute for ALL models from this provider.
+   * Applies when no model-specific override exists.
+   * Example: providers.anthropic.rateLimit.rpm = 100
+   */
+  rpm: number;
+}
+
+export interface ProviderConfig {
+  /** Provider-level rate limit. Applies to all models for this provider unless overridden per-model. */
+  rateLimit?: ProviderRateLimitConfig;
+}
+
+export interface RateLimitConfigSection {
+  /** Per-model RPM overrides. Keys are model names (e.g. "claude-sonnet-4-6"). */
+  models?: Record<string, RateLimitModelConfig>;
+  /** Max requests to queue when limit is hit (default: 50) */
+  maxQueueDepth?: number;
+  /** Max ms a queued request waits before getting a 429 (default: 30000) */
+  queueTimeoutMs?: number;
+}
+
 export interface ProxyConfig {
   /** Anonymous device ID (generated on first run) */
   device_id: string;
@@ -45,6 +73,25 @@ export interface ProxyConfig {
 
   /** Mesh (Osmosis) learning layer config */
   mesh?: MeshConfigSection;
+
+  /** Rate limiter configuration */
+  rateLimit?: RateLimitConfigSection;
+
+  /**
+   * Per-provider configuration.
+   * Supported providers: anthropic, openai, google, xai, groq, perplexity.
+   *
+   * Example ~/.relayplane/config.json:
+   * ```json
+   * {
+   *   "providers": {
+   *     "anthropic": { "rateLimit": { "rpm": 100 } },
+   *     "openai":    { "rateLimit": { "rpm": 60  } }
+   *   }
+   * }
+   * ```
+   */
+  providers?: Record<string, ProviderConfig>;
 }
 
 const CONFIG_VERSION = 1;
@@ -327,4 +374,21 @@ export function updateMeshConfig(updates: Partial<MeshConfigSection>): void {
   const config = loadConfig();
   config.mesh = { ...getMeshConfig(), ...updates };
   saveConfig(config);
+}
+
+/**
+ * Get rate limit config section (with defaults)
+ */
+export function getRateLimitConfig(): RateLimitConfigSection {
+  const config = loadConfig();
+  return config.rateLimit ?? {};
+}
+
+/**
+ * Get per-provider configurations (with defaults).
+ * Returns empty object if no providers section exists in config.
+ */
+export function getProviderConfigs(): Record<string, ProviderConfig> {
+  const config = loadConfig();
+  return config.providers ?? {};
 }
