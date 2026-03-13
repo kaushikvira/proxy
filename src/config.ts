@@ -186,13 +186,13 @@ function createDefaultConfig(): ProxyConfig {
   const now = new Date().toISOString();
   return {
     device_id: generateDeviceId(),
-    telemetry_enabled: false, // Off by default, opt-in with `relayplane telemetry on`
+    telemetry_enabled: true, // On by default — required for cloud dashboard. Disable with `relayplane telemetry off`
     first_run_complete: false,
     config_version: CONFIG_VERSION,
     created_at: now,
     updated_at: now,
     mesh: {
-      enabled: false, // Enabled by default for authenticated users (see loadConfig)
+      enabled: true, // On by default as of v1.9. Disable: `relayplane mesh off`
       endpoint: 'https://osmosis-mesh-dev.fly.dev',
       sync_interval_ms: 60000,
       contribute: true,
@@ -232,7 +232,7 @@ export function loadConfig(): ProxyConfig {
         config.device_id = generateDeviceId();
       }
       if (config.telemetry_enabled === undefined) {
-        config.telemetry_enabled = false;
+        config.telemetry_enabled = true;
       }
       if (!config.config_version) {
         config.config_version = CONFIG_VERSION;
@@ -418,7 +418,7 @@ export function getCredentialsPath(): string {
 export function getMeshConfig(): MeshConfigSection {
   const config = loadConfig();
   return config.mesh ?? {
-    enabled: false,
+    enabled: true,
     endpoint: 'https://osmosis-mesh-dev.fly.dev',
     sync_interval_ms: 60000,
     contribute: true,

@@ -58,7 +58,7 @@ describe('Config Resilience', () => {
     const { loadConfig } = await getConfig();
     const config = loadConfig();
     expect(config.device_id).toMatch(/^anon_/);
-    expect(config.telemetry_enabled).toBe(false);
+    expect(config.telemetry_enabled).toBe(true);
     expect(config.config_version).toBe(1);
     expect(fs.existsSync(configFile)).toBe(true);
   });
@@ -122,11 +122,11 @@ describe('Config Resilience', () => {
     expect(config.telemetry_enabled).toBe(true);
   });
 
-  it('should NOT auto-enable telemetry for anonymous users', async () => {
+  it('should auto-enable telemetry for anonymous users (opt-out model)', async () => {
     // No credentials.json
     const { loadConfig } = await getConfig();
     const config = loadConfig();
-    expect(config.telemetry_enabled).toBe(false);
+    expect(config.telemetry_enabled).toBe(true);
   });
 
   it('should use atomic writes (write to .tmp then rename)', async () => {

@@ -1256,6 +1256,26 @@ async function main(): Promise<void> {
     // Ensure config exists (loadConfig creates default if missing)
     const config = loadConfig();
     const configPath = getConfigPath();
+
+    // Auto-detect OpenRouter-only setup: if only OPENROUTER_API_KEY is set (no Anthropic or
+    // OpenAI keys), automatically configure defaultProvider so all requests route via OpenRouter.
+    const hasOpenRouterKey = !!process.env['OPENROUTER_API_KEY'];
+    const hasAnthropicKey = !!process.env['ANTHROPIC_API_KEY'];
+    const hasOpenAIKey = !!process.env['OPENAI_API_KEY'];
+    if (hasOpenRouterKey && !hasAnthropicKey && !hasOpenAIKey) {
+      try {
+        let rawConfig: Record<string, unknown> = {};
+        if (existsSync(configPath)) {
+          rawConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+        }
+        if (!rawConfig['defaultProvider']) {
+          rawConfig['defaultProvider'] = 'openrouter';
+          writeFileSync(configPath, JSON.stringify(rawConfig, null, 2));
+          console.log('[RelayPlane] Auto-configured defaultProvider: "openrouter" (OpenRouter-only setup detected)');
+        }
+      } catch { /* best-effort — never block init */ }
+    }
+
     console.log('');
     console.log('✅ RelayPlane initialized');
     console.log(`   Config: ${configPath}`);

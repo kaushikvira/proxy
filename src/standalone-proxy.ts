@@ -588,6 +588,14 @@ interface RelayPlaneProxyConfigFile {
    * ```
    */
   ollama?: OllamaProviderConfig;
+  /**
+   * Default provider for all requests. When set, ALL models route to this provider
+   * regardless of model name prefix. Useful for OpenRouter-only setups.
+   *
+   * Example: `"defaultProvider": "openrouter"` routes every request through OpenRouter,
+   * even models like `anthropic/claude-sonnet-4-6` or `claude-sonnet-4-6`.
+   */
+  defaultProvider?: string;
   [key: string]: unknown;
 }
 
@@ -2373,12 +2381,52 @@ function parsePreferredModel(
 }
 
 /**
- * Resolve explicit model name to provider and model
- * Handles direct model names like "claude-3-5-sonnet-latest" or "gpt-4o"
+ * Resolve explicit model name to provider and model.
+/**
+ * Add provider prefix to bare model names for aggregator routing (e.g., OpenRouter).
+ * Complexity routing produces bare names like 'claude-sonnet-4-6' — aggregators need
+ * the full 'anthropic/claude-sonnet-4-6' format to identify the upstream provider.
+ * If the model already has a prefix (contains '/'), it's returned unchanged.
  */
-function resolveExplicitModel(
-  modelName: string
+function addProviderPrefix(model: string, detectedProvider: string): string {
+  // Already has a prefix (e.g., 'anthropic/claude-sonnet-4-6')
+  if (model.includes('/')) return model;
+
+  // Map detected provider to OpenRouter-style prefix
+  const prefixMap: Record<string, string> = {
+    anthropic: 'anthropic',
+    openai: 'openai',
+    google: 'google',
+    deepseek: 'deepseek',
+    mistral: 'mistralai',
+    together: 'together',
+    groq: 'groq',
+  };
+
+  const prefix = prefixMap[detectedProvider];
+  if (prefix) return `${prefix}/${model}`;
+
+  // Fallback: infer from model name patterns
+  if (model.startsWith('claude') || model.startsWith('claude-')) return `anthropic/${model}`;
+  if (model.startsWith('gpt') || model.startsWith('o1') || model.startsWith('o3')) return `openai/${model}`;
+  if (model.startsWith('gemini')) return `google/${model}`;
+
+  return model;
+}
+
+/**
+ * When `defaultProvider` is set, ALL models are routed to that provider
+ * regardless of model name prefix — the model name is preserved as-is
+ * so OpenRouter receives the full `anthropic/claude-sonnet-4-6` format.
+ */
+export function resolveExplicitModel(
+  modelName: string,
+  defaultProvider?: string
 ): { provider: Provider; model: string } | null {
+  if (defaultProvider) {
+    return { provider: defaultProvider as Provider, model: modelName };
+  }
+
   // Resolve aliases first (e.g., relayplane:auto → rp:balanced)
   const resolvedAlias = resolveModelAlias(modelName);
 
@@ -2452,7 +2500,10 @@ function resolveExplicitModel(
   return null;
 }
 
-function resolveConfigModel(modelName: string): { provider: Provider; model: string } | null {
+function resolveConfigModel(modelName: string, defaultProvider?: string): { provider: Provider; model: string } | null {
+  if (defaultProvider) {
+    return { provider: defaultProvider as Provider, model: modelName };
+  }
   return resolveExplicitModel(modelName) ?? parsePreferredModel(modelName);
 }
 
@@ -2679,18 +2730,29 @@ function resolveProviderApiKey(
 
   const apiKeyEnv = DEFAULT_ENDPOINTS[provider]?.apiKeyEnv ?? `${provider.toUpperCase()}_API_KEY`;
   const apiKey = process.env[apiKeyEnv];
-  if (!apiKey) {
-    return {
-      error: {
-        status: 500,
-        payload: {
-          error: `Missing ${apiKeyEnv} environment variable`,
-          hint: `Cross-provider routing requires API keys for each provider. Set ${apiKeyEnv} to enable ${provider} models.`,
-        },
-      },
-    };
+  if (apiKey) {
+    return { apiKey };
   }
-  return { apiKey };
+
+  // Auth passthrough: use incoming Authorization: Bearer token when no env key is configured.
+  // This supports defaultProvider scenarios where the caller passes the API key in the request
+  // (e.g., OpenRouter users who pass their key via Authorization header).
+  if (ctx.authHeader) {
+    const bearerMatch = ctx.authHeader.match(/^Bearer\s+(.+)$/i);
+    if (bearerMatch) {
+      return { apiKey: bearerMatch[1] };
+    }
+  }
+
+  return {
+    error: {
+      status: 500,
+      payload: {
+        error: `Missing ${apiKeyEnv} environment variable`,
+        hint: `Cross-provider routing requires API keys for each provider. Set ${apiKeyEnv} to enable ${provider} models.`,
+      },
+    },
+  };
 }
 
 function getCascadeModels(config: RelayPlaneProxyConfigFile): string[] {
@@ -5035,6 +5097,25 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       }
     }
 
+    // ── defaultProvider: override provider for all non-cascade cloud routing ──
+    // When set, ALL models route to this provider regardless of model prefix.
+    // Ollama is excluded — local routing takes priority over defaultProvider.
+    if (proxyConfig.defaultProvider && !useCascade && targetProvider !== 'ollama') {
+      const originalProvider = targetProvider;
+      targetProvider = proxyConfig.defaultProvider as Provider;
+      // When routing to OpenRouter (or any aggregator), model names need provider prefixes.
+      // Complexity routing produces bare names like 'claude-sonnet-4-6' — OpenRouter needs
+      // 'anthropic/claude-sonnet-4-6'. Passthrough mode preserves the original request model.
+      if (routingMode === 'passthrough') {
+        targetModel = requestedModel;
+      } else {
+        // Add provider prefix for bare model names when routing to an aggregator
+        targetModel = addProviderPrefix(targetModel, originalProvider);
+      }
+      log(`defaultProvider override: ${originalProvider} → ${targetProvider} (model: ${targetModel})`);
+    }
+    // ── End defaultProvider override ──
+
     if (!useCascade) {
       log(`Routing to: ${targetProvider}/${targetModel}`);
     } else {
@@ -5354,6 +5435,10 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       console.log(`    POST /v1/messages/count_tokens - Token counting`);
       console.log(`    GET  /v1/models            - Model list`);
       console.log(`  Models: relayplane:auto, relayplane:cost, relayplane:fast, relayplane:quality`);
+      if (proxyConfig.defaultProvider) {
+        console.log(`  Providers:`);
+        console.log(`    ✓ ${proxyConfig.defaultProvider.charAt(0).toUpperCase() + proxyConfig.defaultProvider.slice(1)} (default provider — all models route here)`);
+      }
       console.log(`  Auth: Passthrough for Anthropic, env vars for other providers`);
       console.log(`  Streaming: ✅ Enabled`);
       startWatchdog();

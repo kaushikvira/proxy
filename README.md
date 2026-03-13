@@ -19,7 +19,7 @@ An open-source LLM proxy that sits between your AI agents and providers. Tracks 
 - 🤖 **Per-agent cost tracking** — identifies agents by system prompt fingerprint and tracks cost per agent
 - 📝 **Content logging** — dashboard shows system prompt preview, user message, and response preview per request
 - 🔐 **OAuth passthrough** — correctly forwards `user-agent` and `x-app` headers for Claude Max subscription users (OpenClaw compatible)
-- 🧠 **Osmosis mesh** — opt-in collective learning layer that shares anonymized routing signals across users (free, opt-in)
+- 🧠 **Osmosis mesh** — collective learning layer that shares anonymized routing signals across users (on by default, opt-out: `relayplane mesh off`)
 - 🔧 **systemd/launchd service** — `relayplane service install` for always-on operation with auto-restart
 - 🏥 **Health watchdog** — `/health` endpoint with uptime tracking and active probing
 - 🛡️ **Config resilience** — atomic writes, automatic backup/restore, credential separation
@@ -36,6 +36,16 @@ relayplane start
 ```
 
 Works with any agent framework that talks to OpenAI or Anthropic APIs. Point your client at `http://localhost:4100` (set `ANTHROPIC_BASE_URL` or `OPENAI_BASE_URL`) and the proxy handles the rest.
+
+## What's New in v1.9
+
+**Breaking changes for upgraders:**
+
+- **Telemetry is now ON by default.** Previously opt-in. Anonymous metadata (model, tokens, cost, latency) is sent to power the cloud dashboard. Your prompts and responses are never collected. Disable: `relayplane telemetry off`
+- **Mesh is now ON by default.** Your proxy contributes anonymized routing data to the collective network. Free users get provider health alerts. Pro users get full routing intelligence. Disable: `relayplane mesh off`
+- **Cloud dashboard is now free.** Previously required a paid plan. Just `relayplane login` to access your data at relayplane.com/dashboard.
+
+If you prefer the old behavior: `relayplane telemetry off && relayplane mesh off`
 
 ## Supported Providers
 
@@ -284,14 +294,14 @@ export ANTHROPIC_API_KEY="sk-ant-api03-..."
 
 ## Telemetry
 
-**Telemetry is disabled by default.** No data is sent to RelayPlane servers unless you explicitly opt in.
+**Telemetry is enabled by default.** This powers the cloud dashboard and helps improve routing recommendations. Only anonymous metadata is sent, never prompts or responses.
 
-Enable with:
+Disable with:
 ```bash
-relayplane telemetry on
+relayplane telemetry off
 ```
 
-When enabled, the proxy sends anonymized metadata to `api.relayplane.com`:
+The proxy sends anonymized metadata to `api.relayplane.com`:
 
 - **device_id** — Random anonymous hash (no PII)
 - **task_type** — Heuristic classification label (e.g., "code_generation", "summarization")
@@ -300,9 +310,9 @@ When enabled, the proxy sends anonymized metadata to `api.relayplane.com`:
 - **latency_ms** — Response time
 - **cost_usd** — Estimated cost
 
-**Never collected:** prompts, responses, file paths, or anything that could identify you or your project. Your prompts go directly to LLM providers, never through RelayPlane servers.
+**Never collected:** prompts, responses, file paths, or anything that could identify you or your project. Your prompts go directly to LLM providers, never through RelayPlane servers. Mesh (on by default) shares anonymized metadata: model, tokens, cost, latency, success/fail. Opt out: `relayplane mesh off`.
 
-> **Cloud dashboard setup:** To see your data at [relayplane.com/dashboard](https://relayplane.com/dashboard), run `relayplane login` then `relayplane telemetry on`. This is the explicit opt-in — you're choosing to send anonymous metadata to power the cloud dashboard. You can disable anytime.
+> **Cloud dashboard:** To see your data at [relayplane.com/dashboard](https://relayplane.com/dashboard), run `relayplane login`. Telemetry is already on by default. The cloud dashboard requires telemetry to function. You can disable telemetry anytime, but cloud features won't work without it.
 
 When the proxy connects and telemetry is enabled, it will confirm:
 ```
@@ -576,7 +586,7 @@ Opt-in collective learning layer. Share anonymized routing signals (model, task 
 }
 ```
 
-Auto-enabled for authenticated users. Contribution is opt-in — set `contribute: false` to consume signals without sharing.
+On by default for all users as of v1.9. Opt out: `relayplane mesh off`. Free users receive provider health alerts; Pro users receive full routing intelligence.
 
 ```bash
 relayplane mesh status              # Atoms local/synced, last sync, endpoint
@@ -655,35 +665,34 @@ relayplane [command] [options]
 
 The proxy is fully functional without a cloud account. All features above are **local and free**.
 
-For teams that want persistent cloud analytics, email digests, and shared routing intelligence, [relayplane.com](https://relayplane.com) offers:
+Cloud dashboard is **free for all signed-up users**. Just `relayplane login`. For extended history, full mesh intelligence, and governance, [relayplane.com](https://relayplane.com) offers:
 
 | Feature | Plan |
 |---------|------|
-| Cloud dashboard — run history, cost trends, analytics | Starter ($9/mo) |
-| Policy engine — budget rules, model allowlists, approval gates | Starter |
-| Weekly cost digest emails | Starter |
-| Routing recommendations from collective intelligence | Starter |
-| 90-day history, data export | Pro ($29/mo) |
-| Cloud anomaly alerts (email, webhook) | Pro |
-| Team access & shared dashboards | Max ($99/mo) |
-| Governance & compliance rules | Max |
+| Cloud dashboard — run history, cost trends, analytics | Free (all tiers) |
+| 30-day cloud history, weekly cost digest, routing recommendations | Starter ($9/mo) |
+| Full mesh intelligence — routing signals from thousands of agents | Pro ($29/mo) |
+| 90-day history, data export, cost spike alerts | Pro |
+| Private team mesh, per-agent spend limits, approval flows | Max ($99/mo) |
+| Governance & compliance rules, audit logs | Max |
 
 **[View pricing →](https://relayplane.com/pricing)**
 
 ### Connecting to Cloud
 
 ```bash
-relayplane login          # authenticate with your cloud account
-relayplane telemetry on   # opt in to send anonymous metadata (model, tokens, cost, latency)
+relayplane login    # authenticate — unlocks cloud dashboard (free)
 ```
 
-> **Privacy-first:** Enabling cloud telemetry sends only anonymous metadata — model name, token counts, cost, latency. Your prompts, inputs, and outputs **never leave your machine**. You can disable anytime: `relayplane telemetry off`.
+Telemetry is on by default. The cloud dashboard requires it to display your data. Disable anytime: `relayplane telemetry off`.
+
+> **Privacy-first:** Telemetry sends only anonymous metadata — model name, token counts, cost, latency. Your prompts, inputs, and outputs **never leave your machine**. Mesh is also on by default; opt out: `relayplane mesh off`.
 
 ---
 
 ## Your Keys Stay Yours
 
-RelayPlane requires your own provider API keys. Your prompts go directly to LLM providers — never through RelayPlane servers. All proxy execution is local. Telemetry (anonymous metadata only) is opt-in.
+RelayPlane requires your own provider API keys. Your prompts go directly to LLM providers — never through RelayPlane servers. All proxy execution is local. Mesh telemetry (anonymous metadata only) is on by default. Opt out: `relayplane mesh off`. Your prompts always go directly to providers.
 
 ## License
 
