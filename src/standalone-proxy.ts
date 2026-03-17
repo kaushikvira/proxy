@@ -223,6 +223,41 @@ export const MODEL_MAPPING: Record<string, { provider: Provider; model: string }
   'gpt-4o': { provider: 'openai', model: 'gpt-4o' },
   'gpt-4o-mini': { provider: 'openai', model: 'gpt-4o-mini' },
   'gpt-4.1': { provider: 'openai', model: 'gpt-4.1' },
+  // OpenAI GPT-5 family
+  'gpt-5.4':           { provider: 'openai', model: 'gpt-5.4' },
+  'gpt-5.4-pro':       { provider: 'openai', model: 'gpt-5.4-pro' },
+  'gpt-5.3':           { provider: 'openai', model: 'gpt-5.3-chat' },
+  'gpt-5.2':           { provider: 'openai', model: 'gpt-5.2' },
+  'gpt-5.1':           { provider: 'openai', model: 'gpt-5.1' },
+  'gpt-5':             { provider: 'openai', model: 'gpt-5.4' },
+  'gpt-5-mini':        { provider: 'openai', model: 'gpt-5-mini' },
+  'gpt-5-nano':        { provider: 'openai', model: 'gpt-5-nano' },
+  // OpenAI GPT-4.1
+  'gpt-4.1-mini':      { provider: 'openai', model: 'gpt-4.1-mini' },
+  'gpt-4.1-nano':      { provider: 'openai', model: 'gpt-4.1-nano' },
+  // OpenAI O-series reasoning
+  'o3':                { provider: 'openai', model: 'o3' },
+  'o3-pro':            { provider: 'openai', model: 'o3-pro' },
+  'o3-mini':           { provider: 'openai', model: 'o3-mini' },
+  'o4-mini':           { provider: 'openai', model: 'o4-mini' },
+  // Google Gemini
+  'gemini-3.1-pro':        { provider: 'google', model: 'gemini-3.1-pro-preview' },
+  'gemini-3-pro':          { provider: 'google', model: 'gemini-3-pro-preview' },
+  'gemini-3-flash':        { provider: 'google', model: 'gemini-3-flash-preview' },
+  'gemini-2.5-pro':        { provider: 'google', model: 'gemini-2.5-pro' },
+  'gemini-2.5-flash':      { provider: 'google', model: 'gemini-2.5-flash' },
+  'gemini-2.5-flash-lite': { provider: 'google', model: 'gemini-2.5-flash-lite' },
+  'gemini-2.0-flash':      { provider: 'google', model: 'gemini-2.0-flash' },
+  // xAI Grok
+  'grok-4.20':         { provider: 'xai', model: 'grok-4.20-beta' },
+  'grok-4':            { provider: 'xai', model: 'grok-4' },
+  'grok-4-fast':       { provider: 'xai', model: 'grok-4-fast' },
+  'grok-4.1-fast':     { provider: 'xai', model: 'grok-4.1-fast' },
+  'grok-3':            { provider: 'xai', model: 'grok-3' },
+  'grok-3-mini':       { provider: 'xai', model: 'grok-3-mini' },
+  // DeepSeek
+  'deepseek':          { provider: 'deepseek', model: 'deepseek-chat' },
+  'deepseek-r1':       { provider: 'deepseek', model: 'deepseek-reasoner' },
 };
 
 /**
@@ -242,9 +277,9 @@ export const RELAYPLANE_ALIASES: Record<string, string> = {
  */
 export let SMART_ALIASES: Record<string, { provider: Provider; model: string }> = {
   // Defaults: OpenRouter (used when no env vars are available)
-  'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-5' },
+  'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6' },
   'rp:fast': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
-  'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.0-flash-001' },
+  'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite' },
   'rp:balanced': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
 };
 
@@ -258,9 +293,9 @@ export function buildSmartAliases(): { aliases: Record<string, { provider: Provi
     return {
       via: 'openrouter',
       aliases: {
-        'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-5' },
+        'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6' },
         'rp:fast': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
-        'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.0-flash-001' },
+        'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite' },
         'rp:balanced': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
       },
     };
@@ -291,9 +326,9 @@ export function buildSmartAliases(): { aliases: Record<string, { provider: Provi
   return {
     via: 'openrouter (fallback — no API keys detected)',
     aliases: {
-      'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-5' },
+      'rp:best': { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6' },
       'rp:fast': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
-      'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.0-flash-001' },
+      'rp:cheap': { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite' },
       'rp:balanced': { provider: 'openrouter', model: 'anthropic/claude-3-5-haiku' },
     },
   };
@@ -386,10 +421,10 @@ export function resolveModelAlias(model: string): string {
 }
 
 /**
- * Default routing based on task type
- * Uses Haiku 3.5 for cost optimization, upgrades based on learned rules
+ * Default routing based on task type.
+ * Updated at proxy startup by provider auto-detection via detectAvailableProviders().
  */
-const DEFAULT_ROUTING: Record<TaskType, { provider: Provider; model: string }> = {
+let DEFAULT_ROUTING: Record<TaskType, { provider: Provider; model: string }> = {
   code_generation: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   code_review: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
   summarization: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
@@ -429,9 +464,135 @@ interface CascadeConfig {
 
 interface ComplexityConfig {
   enabled: boolean;
-  simple: string;
-  moderate: string;
-  complex: string;
+  simple?: string | { provider: string; model: string };
+  moderate?: string | { provider: string; model: string };
+  complex?: string | { provider: string; model: string };
+}
+
+/**
+ * Parse a complexity routing config value into a provider/model pair.
+ * Accepts:
+ *   - plain model name string: "claude-sonnet-4-6"
+ *   - provider/model slash notation: "google/gemini-2.5-flash-lite"
+ *   - openrouter prefix: "openrouter/anthropic/claude-sonnet-4-6"
+ *   - object: { provider: "google", model: "gemini-2.5-flash-lite" }
+ */
+function parseComplexityModel(
+  val: string | { provider: string; model: string }
+): { provider: Provider; model: string } {
+  if (typeof val === 'object' && val !== null) {
+    return val as { provider: Provider; model: string };
+  }
+  if (typeof val === 'string') {
+    if (val.includes('/')) {
+      const idx = val.indexOf('/');
+      const provider = val.slice(0, idx) as Provider;
+      const model = val.slice(idx + 1); // preserves openrouter/anthropic/claude-... style
+      return { provider, model };
+    }
+    // Plain model name — look up in MODEL_MAPPING, fallback to anthropic
+    return MODEL_MAPPING[val] ?? { provider: 'anthropic' as Provider, model: val };
+  }
+  return { provider: 'anthropic' as Provider, model: 'claude-sonnet-4-6' };
+}
+
+interface ComplexityTiers {
+  simple:   { provider: Provider; model: string };
+  moderate: { provider: Provider; model: string };
+  complex:  { provider: Provider; model: string };
+}
+
+/** Per-provider default complexity tier models */
+const PROVIDER_COMPLEXITY_TIERS: Record<string, ComplexityTiers> = {
+  anthropic: {
+    simple:   { provider: 'anthropic', model: 'claude-haiku-4-5' },
+    moderate: { provider: 'anthropic', model: 'claude-sonnet-4-6' },
+    complex:  { provider: 'anthropic', model: 'claude-opus-4-6' },
+  },
+  openai: {
+    simple:   { provider: 'openai', model: 'gpt-4.1-mini' },
+    moderate: { provider: 'openai', model: 'gpt-5.4' },
+    complex:  { provider: 'openai', model: 'gpt-5.4' },
+  },
+  google: {
+    simple:   { provider: 'google', model: 'gemini-2.5-flash-lite' },
+    moderate: { provider: 'google', model: 'gemini-2.5-flash' },
+    complex:  { provider: 'google', model: 'gemini-2.5-pro' },
+  },
+  xai: {
+    simple:   { provider: 'xai', model: 'grok-4.1-fast' },
+    moderate: { provider: 'xai', model: 'grok-4.20-beta' },
+    complex:  { provider: 'xai', model: 'grok-4' },
+  },
+  deepseek: {
+    simple:   { provider: 'deepseek', model: 'deepseek-chat' },
+    moderate: { provider: 'deepseek', model: 'deepseek-chat' },
+    complex:  { provider: 'deepseek', model: 'deepseek-reasoner' },
+  },
+  openrouter: {
+    simple:   { provider: 'openrouter', model: 'google/gemini-2.5-flash-lite' },
+    moderate: { provider: 'openrouter', model: 'google/gemini-2.5-flash' },
+    complex:  { provider: 'openrouter', model: 'anthropic/claude-sonnet-4-6' },
+  },
+};
+
+/**
+ * Detect which AI providers are available based on env vars and user config.
+ * Returns providers in priority order: anthropic > openai > google > xai > deepseek > openrouter > groq
+ */
+function detectAvailableProviders(userConfig?: Record<string, unknown>): Provider[] {
+  const cfg = (userConfig ?? {}) as Record<string, Record<string, string> | undefined>;
+  const auth = (cfg['auth'] ?? {}) as Record<string, string>;
+  const available: Provider[] = [];
+
+  if (process.env['ANTHROPIC_API_KEY'] || auth['anthropicApiKey'] || auth['anthropicMaxToken']) {
+    available.push('anthropic');
+  }
+  if (process.env['OPENAI_API_KEY'] || auth['openaiApiKey']) {
+    available.push('openai');
+  }
+  if (process.env['GOOGLE_API_KEY'] || process.env['GEMINI_API_KEY'] || auth['googleApiKey']) {
+    available.push('google');
+  }
+  if (process.env['XAI_API_KEY'] || auth['xaiApiKey']) {
+    available.push('xai');
+  }
+  if (process.env['DEEPSEEK_API_KEY'] || auth['deepseekApiKey']) {
+    available.push('deepseek');
+  }
+  if (process.env['OPENROUTER_API_KEY'] || auth['openrouterApiKey']) {
+    available.push('openrouter');
+  }
+  if (process.env['GROQ_API_KEY'] || auth['groqApiKey']) {
+    available.push('groq');
+  }
+
+  return available;
+}
+
+/**
+ * Build default complexity tiers based on first detected provider.
+ * Config overrides win — only fills in tiers not explicitly set.
+ */
+function buildDefaultComplexityTiers(
+  providers: Provider[],
+  existing?: Partial<ComplexityConfig>
+): ComplexityTiers {
+  // Find first provider that has a known tier mapping
+  const primaryProvider = providers.find((p) => PROVIDER_COMPLEXITY_TIERS[p]) ?? 'anthropic';
+  const defaults = PROVIDER_COMPLEXITY_TIERS[primaryProvider] ?? PROVIDER_COMPLEXITY_TIERS['anthropic'];
+
+  const simple = existing?.simple != null
+    ? parseComplexityModel(existing.simple)
+    : defaults.simple;
+  const moderate = existing?.moderate != null
+    ? parseComplexityModel(existing.moderate)
+    : defaults.moderate;
+  const complex = existing?.complex != null
+    ? parseComplexityModel(existing.complex)
+    : defaults.complex;
+
+  return { simple, moderate, complex };
 }
 
 interface RoutingConfig {
@@ -1786,6 +1947,33 @@ function convertMessagesToGemini(messages: ChatRequest['messages']): unknown[] {
 }
 
 /**
+ * Recursively strip JSON Schema properties that Gemini rejects but OpenAI/Anthropic accept.
+ * Gemini rejects: patternProperties, additionalProperties (boolean), $schema, definitions, $defs, unevaluatedProperties
+ */
+function sanitizeSchemaForGemini(schema: unknown): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map(sanitizeSchemaForGemini);
+  }
+  if (schema !== null && typeof schema === 'object') {
+    const obj = schema as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      // Strip fields Gemini doesn't support
+      if (key === 'patternProperties') continue;
+      if (key === '$schema') continue;
+      if (key === 'definitions') continue;
+      if (key === '$defs') continue;
+      if (key === 'unevaluatedProperties') continue;
+      // additionalProperties: Gemini only accepts object form, not boolean
+      if (key === 'additionalProperties' && typeof value === 'boolean') continue;
+      result[key] = sanitizeSchemaForGemini(value);
+    }
+    return result;
+  }
+  return schema;
+}
+
+/**
  * Forward non-streaming request to Gemini API
  */
 async function forwardToGemini(
@@ -1818,7 +2006,7 @@ async function forwardToGemini(
       functionDeclarations: request.tools.map((t: any) => ({
         name: t.function.name,
         description: t.function.description || "",
-        parameters: t.function.parameters || {}
+        parameters: sanitizeSchemaForGemini(t.function.parameters || {})
       }))
     }];
   }
@@ -1870,7 +2058,7 @@ async function forwardToGeminiStream(
       functionDeclarations: request.tools.map((t: any) => ({
         name: t.function.name,
         description: t.function.description || "",
-        parameters: t.function.parameters || {}
+        parameters: sanitizeSchemaForGemini(t.function.parameters || {})
       }))
     }];
   }
@@ -2782,9 +2970,15 @@ function getCooldownConfig(config: RelayPlaneProxyConfigFile): CooldownConfig {
   return { ...defaults, ...config.reliability?.cooldowns };
 }
 
+function complexityValToString(val: string | { provider: string; model: string } | undefined): string | undefined {
+  if (val == null) return undefined;
+  if (typeof val === 'string') return val;
+  return `${val.provider}/${val.model}`;
+}
+
 function getCostModel(config: RelayPlaneProxyConfigFile): string {
   return (
-    config.routing?.complexity?.simple ||
+    complexityValToString(config.routing?.complexity?.simple) ||
     config.routing?.cascade?.models?.[0] ||
     'claude-haiku-4-5'
   );
@@ -2792,7 +2986,7 @@ function getCostModel(config: RelayPlaneProxyConfigFile): string {
 
 function getFastModel(config: RelayPlaneProxyConfigFile): string {
   return (
-    config.routing?.complexity?.simple ||
+    complexityValToString(config.routing?.complexity?.simple) ||
     config.routing?.cascade?.models?.[0] ||
     'claude-haiku-4-5'
   );
@@ -2800,7 +2994,7 @@ function getFastModel(config: RelayPlaneProxyConfigFile): string {
 
 function getQualityModel(config: RelayPlaneProxyConfigFile): string {
   return (
-    config.routing?.complexity?.complex ||
+    complexityValToString(config.routing?.complexity?.complex) ||
     config.routing?.cascade?.models?.[config.routing?.cascade?.models?.length ? config.routing.cascade.models.length - 1 : 0] ||
     process.env['RELAYPLANE_QUALITY_MODEL'] ||
     'claude-sonnet-4-6'
@@ -3179,59 +3373,76 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     }
     const isFirstRun = !rawFileHasRouting || !userConfig.first_run_complete;
 
+    // Always detect available providers and update DEFAULT_ROUTING at startup
+    const availableProviders = detectAvailableProviders();
+    {
+      // Build human-readable provider labels for startup log
+      const providerLabels = availableProviders.map((p) => {
+        if (p === 'anthropic') {
+          const key = process.env['ANTHROPIC_API_KEY'] || '';
+          return key.startsWith('sk-ant-api') ? '✓ Anthropic' : '✓ Anthropic (Max)';
+        }
+        return `✓ ${p.charAt(0).toUpperCase() + p.slice(1)}`;
+      });
+      if (providerLabels.length > 0) {
+        console.log(`[RelayPlane] ${providerLabels.join(', ')}`);
+      }
+
+      // Build default tiers, respecting any existing user config overrides
+      const existingComplexity = proxyConfig.routing?.complexity as Partial<ComplexityConfig> | undefined;
+      const defaultProviders: Provider[] = availableProviders.length > 0 ? availableProviders : ['openrouter'];
+      const tiers = buildDefaultComplexityTiers(defaultProviders, existingComplexity);
+
+      // Update DEFAULT_ROUTING with detected provider's moderate tier
+      const moderateRoute = tiers.moderate;
+      const allTaskTypes: TaskType[] = ['code_generation', 'code_review', 'summarization', 'analysis', 'creative_writing', 'data_extraction', 'translation', 'question_answering', 'general'];
+      for (const tt of allTaskTypes) {
+        DEFAULT_ROUTING[tt] = moderateRoute;
+      }
+
+      console.log(`[RelayPlane] Auto-routing: simple=${tiers.simple.model}, moderate=${tiers.moderate.model}, complex=${tiers.complex.model}`);
+    }
+
     if (isFirstRun || proxyConfig.routing?.mode === 'auto') {
       const envAnthropicKey = process.env['ANTHROPIC_API_KEY'];
       const hasRegularApiKey = !!envAnthropicKey && envAnthropicKey.startsWith('sk-ant-api');
 
-      if (hasRegularApiKey) {
-        // Full 3-tier routing with API key
-        console.log('[RelayPlane] Auto-config: ANTHROPIC_API_KEY detected — enabling 3-tier routing (haiku/sonnet/opus)');
-        if (isFirstRun) {
-          // Merge routing into existing config, preserving user fields (device_id, etc.)
-          let existingRaw: Record<string, unknown> = {};
-          try {
-            existingRaw = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
-          } catch { /* fresh start, no existing config */ }
-          const autoRouting = {
-            mode: 'complexity',
-            cascade: { enabled: false, models: [], escalateOn: 'uncertainty', maxEscalations: 1 },
-            complexity: {
-              enabled: true,
-              simple: 'claude-3-5-haiku-latest',
-              moderate: 'claude-sonnet-4-6',
-              complex: 'claude-opus-4-6',
-            },
+      if (isFirstRun) {
+        let existingRaw: Record<string, unknown> = {};
+        try {
+          existingRaw = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
+        } catch { /* fresh start, no existing config */ }
+
+        let autoComplexity: { simple: string; moderate: string; complex: string };
+        if (availableProviders.includes('anthropic') && hasRegularApiKey) {
+          // Full Anthropic API key — enable haiku 3-tier routing
+          console.log('[RelayPlane] Auto-config: ANTHROPIC_API_KEY detected — enabling 3-tier routing (haiku/sonnet/opus)');
+          autoComplexity = { simple: 'claude-haiku-4-5', moderate: 'claude-sonnet-4-6', complex: 'claude-opus-4-6' };
+        } else if (availableProviders.length > 0 && !availableProviders.includes('anthropic')) {
+          // Non-Anthropic provider — use detected provider's tiers
+          const providerTiers = buildDefaultComplexityTiers(availableProviders);
+          console.log(`[RelayPlane] Auto-config: ${availableProviders[0]} detected — enabling provider-aware 3-tier routing`);
+          autoComplexity = {
+            simple: `${providerTiers.simple.provider}/${providerTiers.simple.model}`,
+            moderate: `${providerTiers.moderate.provider}/${providerTiers.moderate.model}`,
+            complex: `${providerTiers.complex.provider}/${providerTiers.complex.model}`,
           };
-          const updatedConfig = { ...existingRaw, routing: autoRouting, first_run_complete: true };
-          await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
-          await fs.promises.writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf8');
-          proxyConfig = await loadProxyConfig(configPath, log);
-          console.log(`[RelayPlane] Auto-config: wrote 3-tier routing config to ${configPath}`);
-        }
-      } else {
-        // No regular API key — OAuth only or no Anthropic key; skip Haiku (OAuth not supported for Haiku)
-        if (isFirstRun) {
+        } else {
+          // OAuth only or no API key — skip Haiku (OAuth not supported for Haiku)
           console.warn('[RelayPlane] ⚠️  No ANTHROPIC_API_KEY (sk-ant-api*) — Haiku disabled. Set ANTHROPIC_API_KEY to enable 3-tier routing.');
-          let existingRaw: Record<string, unknown> = {};
-          try {
-            existingRaw = JSON.parse(await fs.promises.readFile(configPath, 'utf8'));
-          } catch { /* fresh start, no existing config */ }
-          const autoRouting = {
-            mode: 'complexity',
-            cascade: { enabled: false, models: [], escalateOn: 'uncertainty', maxEscalations: 1 },
-            complexity: {
-              enabled: true,
-              simple: 'claude-sonnet-4-6',
-              moderate: 'claude-sonnet-4-6',
-              complex: 'claude-opus-4-6',
-            },
-          };
-          const updatedConfig = { ...existingRaw, routing: autoRouting, first_run_complete: true };
-          await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
-          await fs.promises.writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf8');
-          proxyConfig = await loadProxyConfig(configPath, log);
-          console.log(`[RelayPlane] Auto-config: wrote OAuth-safe config to ${configPath} (no Haiku)`);
+          autoComplexity = { simple: 'claude-sonnet-4-6', moderate: 'claude-sonnet-4-6', complex: 'claude-opus-4-6' };
         }
+
+        const autoRouting = {
+          mode: 'complexity',
+          cascade: { enabled: false, models: [], escalateOn: 'uncertainty', maxEscalations: 1 },
+          complexity: { enabled: true, ...autoComplexity },
+        };
+        const updatedConfig = { ...existingRaw, routing: autoRouting, first_run_complete: true };
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+        await fs.promises.writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf8');
+        proxyConfig = await loadProxyConfig(configPath, log);
+        console.log(`[RelayPlane] Auto-config: wrote routing config to ${configPath}`);
       }
     }
   }
@@ -3838,9 +4049,6 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
           }
         }
         
-        // Debug: log provider stats
-        console.log('[RelayPlane Health] Provider stats:', JSON.stringify(providerStats));
-        
         const providers: Array<{ provider: string; status: string; latency: number; successRate: number; lastChecked: string }> = [];
         for (const [name, ep] of Object.entries(DEFAULT_ENDPOINTS)) {
           // Skip Ollama from normal key-based health check — it's handled separately
@@ -4219,7 +4427,11 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
         
         let selectedModel: string | null = null;
         if (proxyConfig.routing?.complexity?.enabled) {
-          selectedModel = proxyConfig.routing?.complexity?.[complexity];
+          const complexityVal = proxyConfig.routing?.complexity?.[complexity];
+          if (complexityVal != null) {
+            const parsed = parseComplexityModel(complexityVal);
+            selectedModel = `${parsed.provider}/${parsed.model}`;
+          }
         } else {
           selectedModel = getCascadeModels(proxyConfig)[0] || getCostModel(proxyConfig);
         }
@@ -4258,9 +4470,12 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
         } else {
           // Complexity-based routing takes priority when enabled
           if (proxyConfig.routing?.complexity?.enabled) {
-            const complexityModel = proxyConfig.routing?.complexity?.[complexity];
-            selectedModel = complexityModel ?? null;
-            log(`Complexity routing: ${complexity} → ${selectedModel}`);
+            const complexityVal = proxyConfig.routing?.complexity?.[complexity];
+            if (complexityVal != null) {
+              const parsed = parseComplexityModel(complexityVal);
+              selectedModel = `${parsed.provider}/${parsed.model}`;
+              log(`Complexity routing: ${complexity} → ${parsed.provider}/${parsed.model}`);
+            }
           }
           // Fall back to learned routing rules (non-default only)
           if (!selectedModel) {
@@ -5048,9 +5263,12 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       } else {
         // Complexity-based routing takes priority when enabled
         if (proxyConfig.routing?.complexity?.enabled) {
-          const complexityModel = proxyConfig.routing?.complexity?.[complexity];
-          selectedModel = complexityModel ?? null;
-          log(`Complexity routing: ${complexity} → ${selectedModel}`);
+          const complexityVal = proxyConfig.routing?.complexity?.[complexity];
+          if (complexityVal != null) {
+            const parsed = parseComplexityModel(complexityVal);
+            selectedModel = `${parsed.provider}/${parsed.model}`;
+            log(`Complexity routing: ${complexity} → ${parsed.provider}/${parsed.model}`);
+          }
         }
         // Fall back to learned routing rules (non-default only)
         if (!selectedModel && !targetModel) {
