@@ -57,8 +57,8 @@ import {
   getTelemetryPath,
 } from './telemetry.js';
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from 'fs';
+import { join, dirname, resolve } from 'path';
 import { homedir } from 'os';
 import { getResponseCache } from './response-cache.js';
 import { getBudgetManager } from './budget.js';
@@ -710,6 +710,16 @@ function isRoot(): boolean {
   return process.getuid?.() === 0;
 }
 
+function sanitizePosixUsername(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const cleaned = raw.trim();
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_\-\.]{0,31}$/.test(cleaned)) {
+    console.error(`SUDO_USER "${cleaned}" is not a valid POSIX username. Aborting.`);
+    process.exit(1);
+  }
+  return cleaned;
+}
+
 async function handleAutostartCommand(args: string[]): Promise<void> {
   const sub = args[0] ?? 'status';
 
@@ -730,8 +740,35 @@ async function handleAutostartCommand(args: string[]): Promise<void> {
     try {
       binPath = execSync('which relayplane', { encoding: 'utf8' }).trim();
     } catch {
+      if (isRoot()) {
+        console.warn('  ⚠️  Could not find relayplane in PATH (sudo may have stripped it).');
+        console.warn('     If the service fails to start, try: sudo env "PATH=$PATH" relayplane autostart on');
+      }
       binPath = process.argv[0] ?? 'relayplane';
     }
+
+    // Detect the real invoking user (not root) — sanitize to prevent injection
+    const sudoUser = sanitizePosixUsername(process.env.SUDO_USER);
+    let serviceUser: string;
+    let serviceHome: string;
+    if (sudoUser === 'root') {
+      // root ran sudo as root — use root's real home
+      serviceUser = 'root';
+      serviceHome = '/root';
+    } else if (sudoUser) {
+      serviceUser = sudoUser;
+      serviceHome = `/home/${sudoUser}`;
+    } else {
+      const userEnv = process.env.USER;
+      serviceUser = (userEnv && userEnv !== 'root') ? userEnv : 'root';
+      serviceHome = (userEnv && userEnv !== 'root') ? `/home/${userEnv}` : homedir();
+    }
+    const resolvedAutoHome = resolve(serviceHome);
+    if (resolvedAutoHome !== '/root' && !resolvedAutoHome.startsWith('/home/')) {
+      console.error(`Computed home "${resolvedAutoHome}" is outside expected paths. Aborting.`);
+      process.exit(1);
+    }
+    serviceHome = resolvedAutoHome;
 
     // Capture API keys from current environment for systemd
     const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 'MOONSHOT_API_KEY'];
@@ -739,6 +776,12 @@ async function handleAutostartCommand(args: string[]): Promise<void> {
       .filter(k => process.env[k])
       .map(k => `Environment=${k}=${process.env[k]}`)
       .join('\n');
+
+    const envFileLines = [
+      `EnvironmentFile=-${serviceHome}/.env`,
+      `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
+      `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+    ].join('\n');
 
     const serviceContent = `[Unit]
 Description=RelayPlane Proxy - Intelligent AI Model Routing
@@ -748,11 +791,12 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=root
+User=${serviceUser}
 ExecStart=${binPath}
 Restart=always
 RestartSec=3
-Environment=HOME=/root
+${envFileLines}
+Environment=HOME=${serviceHome}
 ${envLines}
 
 [Install]
@@ -760,6 +804,7 @@ WantedBy=multi-user.target
 `;
 
     writeFileSync(SERVICE_PATH, serviceContent);
+    chmodSync(SERVICE_PATH, 0o600);
     execSync('systemctl daemon-reload && systemctl enable relayplane-proxy && systemctl start relayplane-proxy', { stdio: 'inherit' });
 
     // Save preference
@@ -993,6 +1038,10 @@ async function handleServiceCommand(args: string[]): Promise<void> {
   try {
     binPath = execSync('which relayplane', { encoding: 'utf8' }).trim();
   } catch {
+    if (isRoot()) {
+      console.warn('  ⚠️  Could not find relayplane in PATH (sudo may have stripped it).');
+      console.warn('     If the service fails to start, try: sudo env "PATH=$PATH" relayplane service install');
+    }
     binPath = process.argv[0] ?? 'relayplane';
   }
 
@@ -1007,19 +1056,58 @@ async function handleServiceCommand(args: string[]): Promise<void> {
         return;
       }
 
+      // Detect the real invoking user (not root) — sanitize to prevent injection
+      const sudoUser = sanitizePosixUsername(process.env.SUDO_USER);
+      let serviceUser: string;
+      let serviceHome: string;
+      if (sudoUser === 'root') {
+        // root ran sudo as root — use root's real home
+        serviceUser = 'root';
+        serviceHome = '/root';
+      } else if (sudoUser) {
+        serviceUser = sudoUser;
+        serviceHome = `/home/${sudoUser}`;
+      } else {
+        const userEnv = process.env.USER;
+        serviceUser = (userEnv && userEnv !== 'root') ? userEnv : 'root';
+        serviceHome = (userEnv && userEnv !== 'root') ? `/home/${userEnv}` : homedir();
+      }
+      const resolvedSvcHome = resolve(serviceHome);
+      if (resolvedSvcHome !== '/root' && !resolvedSvcHome.startsWith('/home/')) {
+        console.error(`Computed home "${resolvedSvcHome}" is outside expected paths. Aborting.`);
+        process.exit(1);
+      }
+      serviceHome = resolvedSvcHome;
+
       // Read the shipped service template and patch ExecStart
       const assetPath = getServiceAssetPath();
       let serviceContent: string;
       if (existsSync(assetPath)) {
         serviceContent = readFileSync(assetPath, 'utf8');
         serviceContent = serviceContent.replace(/^ExecStart=.*$/m, `ExecStart=${binPath}`);
+        serviceContent = serviceContent.replace(/^User=.*$/m, `User=${serviceUser}`);
+        serviceContent = serviceContent.replace(/^Environment=HOME=.*$/m, `Environment=HOME=${serviceHome}`);
+        // Insert EnvironmentFile lines before Environment= lines
+        const envFileLines = [
+          `EnvironmentFile=-${serviceHome}/.env`,
+          `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
+          `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+        ].join('\n');
+        serviceContent = serviceContent.replace(/^(Environment=HOME=.*)$/m, `${envFileLines}
+$1`);
       } else {
-        // Fallback: generate inline
+        // Fallback: generate inline — reuse already-sanitized serviceUser/serviceHome from above
+
         const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY'];
         const envLines = envKeys
           .filter(k => process.env[k])
           .map(k => `Environment=${k}=${process.env[k]}`)
           .join('\n');
+        const envFileLines = [
+          `EnvironmentFile=-${serviceHome}/.env`,
+          `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
+          `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+        ].join('\n');
         serviceContent = `[Unit]
 Description=RelayPlane Proxy - Intelligent AI Model Routing
 After=network.target
@@ -1028,14 +1116,15 @@ StartLimitBurst=5
 
 [Service]
 Type=notify
-User=root
+User=${serviceUser}
 ExecStart=${binPath}
 Restart=always
 RestartSec=5
 WatchdogSec=30
 StandardOutput=journal
 StandardError=journal
-Environment=HOME=/root
+${envFileLines}
+Environment=HOME=${serviceHome}
 Environment=NODE_ENV=production
 ${envLines}
 
@@ -1067,6 +1156,7 @@ WantedBy=multi-user.target
       }
 
       writeFileSync(SERVICE_PATH, serviceContent);
+      chmodSync(SERVICE_PATH, 0o600);
       execSync('systemctl daemon-reload && systemctl enable --now relayplane-proxy', { stdio: 'inherit' });
 
       const config = loadRelayplaneConfig();
