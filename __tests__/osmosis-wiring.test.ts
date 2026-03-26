@@ -3,10 +3,6 @@
  *
  * Verifies that captureAtom is called via the middleware route() path,
  * and that osmosis.db (or fallback JSONL) accumulates atoms correctly.
- *
- * SKIPPED: captureAtom is not yet wired into the middleware pipeline.
- * Re-enable when osmosis-phase1 branch is fully integrated.
- * See: origin/auto/2026-03-07-osmosis-phase1
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -64,7 +60,7 @@ function countAtoms(testDir: string): number {
   return 0;
 }
 
-describe.skip('Osmosis wiring — captureAtom via middleware', () => {
+describe('Osmosis wiring — captureAtom via middleware', () => {
   let server: http.Server;
   let mw: RelayPlaneMiddleware;
 

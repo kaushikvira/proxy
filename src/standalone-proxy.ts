@@ -78,6 +78,7 @@ const estimateRateMap = new Map<string, EstimateRateLimitEntry>();
 // Without this, IPs that make one request and disappear stay in the map forever.
 setInterval(() => purgeExpiredRateLimitEntries(estimateRateMap, Date.now()), 5 * 60 * 1000);
 
+import { captureAtom } from './osmosis-store.js';
 const PROXY_VERSION: string = (() => {
   try {
     const pkgPath = path.join(__dirname, '..', 'package.json');
@@ -132,6 +133,28 @@ function meshCapture(
   tokensIn: number, tokensOut: number, costUsd: number,
   latencyMs: number, success: boolean, errorType?: string,
 ): void {
+  // Osmosis Phase 1: capture KnowledgeAtom (always, independent of mesh)
+  const ts = Date.now();
+  if (success) {
+    captureAtom({
+      type: 'success',
+      model,
+      taskType,
+      latencyMs,
+      inputTokens: tokensIn,
+      outputTokens: tokensOut,
+      timestamp: ts,
+    });
+  } else {
+    captureAtom({
+      type: 'failure',
+      errorType: errorType ?? 'unknown',
+      model,
+      fallbackTaken: false,
+      timestamp: ts,
+    });
+  }
+
   if (!_meshHandle) return;
   try {
     _meshHandle.captureRequest({

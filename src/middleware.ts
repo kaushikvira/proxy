@@ -15,6 +15,43 @@ import { ProcessManager, type ProcessManagerOptions } from './process-manager.js
 import { StatsCollector } from './stats.js';
 import { StatusReporter, type ProxyStatus } from './status.js';
 import { type Logger, defaultLogger } from './logger.js';
+import { captureAtom } from './osmosis-store.js';
+
+function inferTaskType(reqPath: string, body: string): string {
+  if (reqPath.includes('/v1/messages') || reqPath.includes('/v1/chat/completions')) return 'chat';
+  if (reqPath.includes('/v1/completions')) return 'completion';
+  if (body && body.toLowerCase().includes('code')) return 'code';
+  return 'unknown';
+}
+
+function extractModel(body: string): string {
+  try {
+    const parsed = JSON.parse(body) as Record<string, unknown>;
+    return typeof parsed['model'] === 'string' ? parsed['model'] : 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function extractTokenUsage(responseBody: string): { inputTokens: number; outputTokens: number } {
+  try {
+    const parsed = JSON.parse(responseBody) as Record<string, unknown>;
+    const usage = parsed['usage'] as Record<string, number> | undefined;
+    if (usage) {
+      return {
+        inputTokens: usage['input_tokens'] ?? usage['prompt_tokens'] ?? 0,
+        outputTokens: usage['output_tokens'] ?? usage['completion_tokens'] ?? 0,
+      };
+    }
+  } catch { /* ignore */ }
+  return { inputTokens: 0, outputTokens: 0 };
+}
+
+function classifyError(errMsg: string): string {
+  if (errMsg.includes('timeout')) return 'timeout';
+  if (errMsg.includes('ECONNREFUSED') || errMsg.includes('network')) return 'network_error';
+  return 'http_error';
+}
 
 export interface MiddlewareRequest {
   method: string;
@@ -145,18 +182,32 @@ export class RelayPlaneMiddleware {
    * Route a request: proxy if healthy, direct otherwise.
    */
   async route(req: MiddlewareRequest, directSend: DirectSendFn): Promise<MiddlewareResponse> {
+    const bodyStr = typeof req.body === 'string' ? req.body : (req.body?.toString() ?? '');
+    const model = extractModel(bodyStr);
+    const taskType = inferTaskType(req.path, bodyStr);
+
     if (!this.enabled || !this.circuitBreaker.isHealthy()) {
       const reason = !this.enabled ? 'proxy disabled' : 'circuit breaker OPEN';
       this.logger.warn(`Falling back to direct: ${reason}`);
 
       const start = Date.now();
       const resp = await directSend(req);
+      const latencyMs = Date.now() - start;
       this.stats.recordRequest({
         timestamp: start,
-        latencyMs: Date.now() - start,
+        latencyMs,
         viaProxy: false,
         success: resp.status < 500,
       });
+
+      if (!this.enabled) {
+        // Proxy disabled — capture success for the direct call
+        const { inputTokens, outputTokens } = extractTokenUsage(resp.body);
+        captureAtom({ type: 'success', model, taskType, latencyMs, inputTokens, outputTokens, timestamp: Date.now() });
+      } else {
+        // Circuit breaker OPEN — capture failure (proxy unavailable)
+        captureAtom({ type: 'failure', model, errorType: 'circuit_open', fallbackTaken: true, timestamp: Date.now() });
+      }
       return resp;
     }
 
@@ -164,18 +215,22 @@ export class RelayPlaneMiddleware {
     try {
       const resp = await this.sendViaProxy(req);
       this.circuitBreaker.recordSuccess();
+      const latencyMs = Date.now() - start;
       this.stats.recordRequest({
         timestamp: start,
-        latencyMs: Date.now() - start,
+        latencyMs,
         viaProxy: true,
         success: true,
       });
+      const { inputTokens, outputTokens } = extractTokenUsage(resp.body);
+      captureAtom({ type: 'success', model, taskType, latencyMs, inputTokens, outputTokens, timestamp: Date.now() });
       return resp;
     } catch (err) {
       this.circuitBreaker.recordFailure();
       const errMsg = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Falling back to direct: proxy error (${errMsg})`);
       this.statusReporter.setLastError(errMsg);
+      captureAtom({ type: 'failure', model, errorType: classifyError(errMsg), fallbackTaken: true, timestamp: Date.now() });
 
       const directStart = Date.now();
       const resp = await directSend(req);
