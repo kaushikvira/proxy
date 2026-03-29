@@ -5,6 +5,8 @@
 
 A **Node.js npm LLM proxy** that sits between your AI agents and providers. Drop-in replacement for OpenAI and Anthropic base URLs — no Docker, no Python, just `npm install`. Tracks every request, shows where the money goes, and offers configurable task-aware routing — all running **locally, for free**.
 
+**Live savings dashboard:** [relayplane.com/live](https://relayplane.com/live) — see real-time aggregate savings from developers worldwide.
+
 **The npm-native LLM proxy for Node.js developers.** Works with Claude Code, Cursor, OpenClaw, and any tool that supports `OPENAI_BASE_URL` or `ANTHROPIC_BASE_URL`.
 
 **Free, open-source proxy features:**
