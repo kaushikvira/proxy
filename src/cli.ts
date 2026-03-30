@@ -37,6 +37,7 @@
  */
 
 import { startProxy } from './standalone-proxy.js';
+import { fireDashboardLinked } from './lifecycle-telemetry.js';
 import {
   loadConfig,
   isFirstRun,
@@ -283,6 +284,8 @@ async function handleLoginCommand(): Promise<void> {
         if (pollData.teamName) console.log(`     Team: ${pollData.teamName}`);
         console.log(`     Plan: ${pollData.plan || 'free'}`);
         console.log('');
+        // Lifecycle telemetry: dashboard linked
+        fireDashboardLinked();
         // Signal running proxy to pick up new credentials
         const proxyRunning = await fetch('http://127.0.0.1:4100/health', { signal: AbortSignal.timeout(1000) })
           .then(r => r.ok).catch(() => false);

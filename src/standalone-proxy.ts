@@ -39,6 +39,7 @@ type Provider = CoreProvider
   | 'ollama';
 import { buildModelNotFoundError } from './utils/model-suggestions.js';
 import { recordTelemetry as recordCloudTelemetry, inferTaskType as inferTelemetryTaskType, estimateCost, queueForUpload } from './telemetry.js';
+import { maybeFireActivated, maybeSendSessionHeartbeat } from './lifecycle-telemetry.js';
 import { loadConfig as loadUserConfig, hasValidCredentials, getMeshConfig, getDeviceId, isTelemetryEnabled } from './config.js';
 import { initMeshLayer, type MeshHandle } from './mesh/index.js';
 import { getResponseCache, computeCacheKey, computeAggressiveCacheKey, isDeterministic, responseHasToolCalls, type CacheConfig } from './response-cache.js';
@@ -410,6 +411,10 @@ function sendCloudTelemetry(
     setImmediate(() => checkAndShowNudge());
     // Star nudge fires at 50 requests (separate from signup nudge at 100)
     setImmediate(() => checkAndShowStarNudge());
+    // Lifecycle event: fire proxy.activated once on first successful request
+    if (success) {
+      setImmediate(() => maybeFireActivated());
+    }
   } catch {
     // Telemetry should never break the proxy
   }
@@ -3466,6 +3471,9 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   // Check once at startup whether the nudges have already been shown
   initNudge();
   initStarNudge();
+
+  // Lifecycle event: daily session heartbeat
+  setImmediate(() => maybeSendSessionHeartbeat());
 
   // Flush history on shutdown
   const handleShutdown = () => {
