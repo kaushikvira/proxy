@@ -273,10 +273,10 @@ export function recordTelemetry(event: Omit<TelemetryEvent, 'device_id' | 'times
   try {
     const configDir = getConfigDir();
     if (!fs.existsSync(configDir)) {
-      fs.mkdirSync(configDir, { recursive: true });
+      fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
     }
-    
-    fs.appendFileSync(TELEMETRY_FILE, JSON.stringify(fullEvent) + '\n');
+
+    fs.appendFileSync(TELEMETRY_FILE, JSON.stringify(fullEvent) + '\n', { mode: 0o600 });
   } catch (err) {
     // Silently fail - telemetry should never break the proxy
   }

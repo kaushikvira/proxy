@@ -3910,16 +3910,12 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   }
 
   const server = http.createServer(async (req, res) => {
-    // CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    // CORS: same-origin only (no cross-origin access to proxy)
+    res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:4100');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
-      'Content-Type, Authorization, x-api-key, anthropic-beta, anthropic-version, X-RelayPlane-Bypass, X-RelayPlane-Model'
-    );
-    res.setHeader(
-      'Access-Control-Expose-Headers',
-      'x-relayplane-routed-model, x-relayplane-requested-model, x-relayplane-complexity, x-relayplane-provider, x-relayplane-routing-mode'
+      'Content-Type, Authorization, x-api-key, anthropic-beta, anthropic-version'
     );
 
     if (req.method === 'OPTIONS') {
