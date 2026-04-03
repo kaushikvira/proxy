@@ -82,6 +82,10 @@ import { captureAtom, countAtomsForSession, getOsmosisDb, getRelayplaneDir } fro
 import { writeEpisode } from './episode-writer.js';
 import { getSessionId, upsertSession, getSessions, getActiveSessions } from './session-tracker.js';
 import { TraceWriter, sha256Hex, defaultTracesConfig } from './trace-writer.js';
+import { getLiveEventBus } from './live-events.js';
+import { getSessionTree } from './session-tree.js';
+import { startStream, endStream, getStream } from './capture.js';
+import { getLiveSessionHTML } from './dashboard-live.js';
 import { getToolRouter, extractToolContext } from './tool-router.js';
 import { getTokenPool, type PoolAccountConfig } from './token-pool.js';
 import { randomUUID } from 'node:crypto';
@@ -3515,6 +3519,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   // Flush history on shutdown
   const handleShutdown = () => {
     flushAgentRegistry();
+    getLiveEventBus().stop();
     meshHandle.stop();
     shutdownHistory();
     TraceWriter.getInstance().shutdown();
@@ -4590,6 +4595,36 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       return;
     }
 
+    // Live session viewer
+    if (req.method === 'GET' && pathname === '/sessions') {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(getLiveSessionHTML());
+      return;
+    }
+
+    // SSE event stream for live dashboard
+    if (req.method === 'GET' && pathname === '/api/live/events') {
+      getLiveEventBus().attachSSEClient(res);
+      return;
+    }
+
+    // Session list API
+    if (req.method === 'GET' && pathname === '/api/sessions') {
+      const sessions = getSessionTree().getSessions();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ sessions }));
+      return;
+    }
+
+    // Single session API
+    if (req.method === 'GET' && pathname.startsWith('/api/sessions/') && pathname.split('/').length === 4) {
+      const sessionId = decodeURIComponent(pathname.split('/')[3]);
+      const session = getSessionTree().getSession(sessionId);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ session }));
+      return;
+    }
+
     // === Dashboard ===
     if (req.method === 'GET' && (pathname === '/' || pathname === '/dashboard')) {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -5637,6 +5672,17 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
               ...nativeStreamRpHeaders,
             });
             const reader = providerResponse.body?.getReader();
+            // Live session capture: start stream
+            const parentTraceId = getHeaderValue(req, 'x-parent-trace-id') || null;
+            const liveStream = startStream(nativeTraceId, nativeSessionId, parentTraceId, targetModel || requestedModel);
+            liveStream.setRequestMetadata({
+              model: requestedModel,
+              routedModel: targetModel || requestedModel,
+              systemPromptPreview: (nativeSystemPrompt ?? '').slice(0, 200),
+              userMessage: extractPromptText(requestBody['messages'] as any[] || []).slice(0, 500),
+              tools: Array.isArray(requestBody['tools']) ? (requestBody['tools'] as any[]).map((t: any) => t?.name ?? '').filter(Boolean) : [],
+              agentFingerprint: nativeAgentFingerprint ?? '',
+            });
             let streamTokensIn = 0;
             let streamTokensOut = 0;
             let streamCacheCreation = 0;
@@ -5676,6 +5722,20 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
                           streamTokensIn = evt.usage.prompt_tokens ?? evt.usage.input_tokens ?? streamTokensIn;
                           streamTokensOut = evt.usage.completion_tokens ?? evt.usage.output_tokens ?? streamTokensOut;
                         }
+                        // Live session capture: tap stream events
+                        const liveAcc = getStream(nativeTraceId);
+                        if (liveAcc) {
+                          if (evt.type === 'content_block_delta' && evt.delta) {
+                            if (evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
+                              liveAcc.onThinkingDelta(evt.delta.thinking);
+                            } else if (evt.delta.type === 'text_delta' && evt.delta.text) {
+                              liveAcc.onTextDelta(evt.delta.text);
+                            }
+                          }
+                          if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
+                            liveAcc.onToolCall(evt.content_block.name ?? '', JSON.stringify(evt.content_block.input ?? {}));
+                          }
+                        }
                       } catch {
                         // not JSON, skip
                       }
@@ -5704,6 +5764,24 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
             }
             // Store streaming token counts so telemetry can use them
             nativeResponseData = { usage: { input_tokens: streamTokensIn, output_tokens: streamTokensOut, cache_creation_input_tokens: streamCacheCreation, cache_read_input_tokens: streamCacheRead } } as Record<string, unknown>;
+            // Live session capture: finalize stream
+            {
+              const liveAcc = getStream(nativeTraceId);
+              if (liveAcc) {
+                liveAcc.setResponseMetadata({
+                  tokensIn: streamTokensIn,
+                  tokensOut: streamTokensOut,
+                  thinkingTokens: 0,
+                  costUsd: estimateCost(targetModel || requestedModel, streamTokensIn, streamTokensOut, streamCacheCreation || undefined, streamCacheRead || undefined),
+                  latencyMs: Date.now() - startTime,
+                  cacheReadTokens: streamCacheRead,
+                  cacheCreationTokens: streamCacheCreation,
+                  success: true,
+                  finishReason: 'end_turn',
+                });
+                endStream(nativeTraceId);
+              }
+            }
             res.end();
           } else {
             nativeResponseData = await providerResponse.json() as Record<string, unknown>;
@@ -6699,6 +6777,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
       console.log(`  Auth: Passthrough for Anthropic, env vars for other providers`);
       console.log(`  Streaming: ✅ Enabled`);
       startWatchdog();
+      getLiveEventBus().startHeartbeat();
       log('Health watchdog started (30s interval, sd_notify enabled)');
       resolve(server);
     });

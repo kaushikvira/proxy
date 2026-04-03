@@ -104,16 +104,18 @@ function getDb(): import('better-sqlite3').Database | null {
 export function getSessionId(
   req: Pick<http.IncomingMessage, 'headers'>,
   model?: string,
-): { sessionId: string; sessionSource: 'claude-code' | 'synthetic' } {
+): { sessionId: string; sessionSource: 'claude-code' | 'synthetic'; parentTraceId: string | null } {
   const headerVal = req.headers['x-claude-code-session-id'];
   const raw = Array.isArray(headerVal) ? headerVal[0] : headerVal;
   const MAX_SESSION_ID_LEN = 128;
   const SESSION_ID_RE = /^[\w\-.:@]+$/;
 
+  const parentTraceId = (req.headers['x-parent-trace-id'] as string) || null;
+
   if (raw && raw.trim()) {
     const trimmed = raw.trim().slice(0, MAX_SESSION_ID_LEN);
     if (SESSION_ID_RE.test(trimmed)) {
-      return { sessionId: trimmed, sessionSource: 'claude-code' };
+      return { sessionId: trimmed, sessionSource: 'claude-code', parentTraceId };
     }
     // Fall through to synthetic if header is malformed
   }
@@ -123,7 +125,7 @@ export function getSessionId(
   const hourBucket = `${now.getUTCFullYear()}-${now.getUTCMonth()}-${now.getUTCDate()}-${now.getUTCHours()}`;
   const key = `${hourBucket}:${model ?? 'unknown'}`;
   const hash = crypto.createHash('sha256').update(key).digest('hex').slice(0, 16);
-  return { sessionId: `syn_${hash}`, sessionSource: 'synthetic' };
+  return { sessionId: `syn_${hash}`, sessionSource: 'synthetic', parentTraceId };
 }
 
 /**
