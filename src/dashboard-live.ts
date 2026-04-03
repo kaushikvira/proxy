@@ -414,12 +414,12 @@ export function getLiveSessionHTML(): string {
     }
 
     // Auth type
-    if (firstReq.authType || firstReq.apiKeyPrefix) {
+    if (firstReq.authType || firstReq.authKeyPreview) {
       html += '<div class="context-section">';
       html += '<div class="context-section-title">Authentication</div>';
       html += '<span style="color:#8b949e;font-size:12px">' + esc(firstReq.authType || 'API Key') + ' </span>';
-      if (firstReq.apiKeyPrefix) {
-        html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(firstReq.apiKeyPrefix) + '">reveal prefix</span>';
+      if (firstReq.authKeyPreview) {
+        html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(firstReq.authKeyPreview) + '">reveal prefix</span>';
       }
       html += '</div>';
     }
