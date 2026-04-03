@@ -339,10 +339,7 @@ export function loadConfig(): ProxyConfig {
   if (hasValidCredentials()) {
     config.telemetry_enabled = true;
     console.log('[RelayPlane] Telemetry enabled (authenticated user)');
-    // Auto-enable mesh for authenticated users
-    if (config.mesh) {
-      config.mesh.enabled = true;
-    }
+    // Mesh is opt-in; do not auto-enable for authenticated users
   }
   
   saveConfig(config);

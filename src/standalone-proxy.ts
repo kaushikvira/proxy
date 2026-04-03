@@ -3020,7 +3020,7 @@ function getCascadeModels(config: RelayPlaneProxyConfigFile): string[] {
 function getCascadeConfig(config: RelayPlaneProxyConfigFile): CascadeConfig {
   const c = config.routing?.cascade;
   return {
-    enabled: c?.enabled ?? true,
+    enabled: c?.enabled ?? false,
     models: c?.models ?? ['claude-haiku-4-5', 'claude-sonnet-4-6', 'claude-opus-4-6'],
     escalateOn: c?.escalateOn ?? 'uncertainty',
     maxEscalations: c?.maxEscalations ?? 1,
