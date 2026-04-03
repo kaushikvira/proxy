@@ -152,6 +152,36 @@ export function getLiveSessionHTML(): string {
     animation: blink 1s step-end infinite;
   }
   @keyframes blink { 50% { opacity: 0; } }
+
+  /* --- New QoL styles --- */
+  .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600; margin-left: 4px; color: #0d1117; }
+  .tool-call-rich { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #161b22; font-size: 12px; }
+  .tool-icon { flex-shrink: 0; }
+  .tool-display-name { color: #ffa657; font-weight: 600; min-width: 50px; }
+  .tool-summary { color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bash-viewer { background: #1a1e24; border: 1px solid #30363d; border-radius: 4px; padding: 6px 10px; margin: 4px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; color: #e6edf3; }
+  .session-summary-bar { display: flex; gap: 16px; padding: 8px 16px; background: #161b22; border-bottom: 1px solid #21262d; font-size: 12px; color: #8b949e; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
+  .session-summary-bar span { white-space: nowrap; }
+  .cost-bar { display: flex; height: 3px; border-radius: 2px; overflow: hidden; margin: 2px 0 6px 0; }
+  .cost-bar .seg-thinking { background: #a371f7; }
+  .cost-bar .seg-input { background: #58a6ff; }
+  .cost-bar .seg-output { background: #3fb950; }
+  .thinking-summary { font-size: 12px; color: #8b949e; font-style: italic; margin: 2px 0; cursor: pointer; }
+  .thinking-summary:hover { color: #c9d1d9; }
+  .context-panel { border: 1px solid #21262d; border-radius: 6px; margin: 8px 0; background: #161b22; }
+  .context-header { padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: #8b949e; display: flex; justify-content: space-between; align-items: center; }
+  .context-header:hover { color: #c9d1d9; }
+  .context-body { display: none; padding: 0 12px 12px; }
+  .context-body.open { display: block; }
+  .context-section { margin: 8px 0; }
+  .context-section-title { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .context-pre { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 8px; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #c9d1d9; }
+  .auth-reveal { background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; color: #8b949e; }
+  .auth-reveal:hover { color: #c9d1d9; border-color: #58a6ff; }
+  .tool-def-list { font-size: 11px; color: #8b949e; max-height: 200px; overflow-y: auto; }
+  .tool-def-item { padding: 2px 0; border-bottom: 1px solid #21262d; }
+  .tool-def-name { color: #ffa657; font-weight: 600; }
+  .tool-def-desc { color: #6e7681; margin-left: 8px; }
 </style>
 </head>
 <body>
@@ -212,6 +242,238 @@ export function getLiveSessionHTML(): string {
     } catch(e) { return ''; }
   }
 
+  function formatTokenCount(n) {
+    if (!n || n === 0) return '0';
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+  }
+
+  // --- New QoL helpers ---
+
+  function parseToolCallDisplay(name, inputJson) {
+    var input = {};
+    if (typeof inputJson === 'string') {
+      try { input = JSON.parse(inputJson); } catch(e) { input = {}; }
+    } else if (typeof inputJson === 'object' && inputJson) {
+      input = inputJson;
+    }
+    var icon = '', displayName = '', summary = '';
+
+    if (name === 'Read' || name === 'read_file') {
+      icon = '\\ud83d\\udcd6'; displayName = 'Read';
+      summary = input.file_path || input.filePath || '';
+    } else if (name === 'Grep') {
+      icon = '\\ud83d\\udd0d'; displayName = 'Grep';
+      var pat = input.pattern || '';
+      var gpath = input.path || '';
+      summary = '"' + pat + '"' + (gpath ? ' in ' + gpath : '');
+    } else if (name === 'Glob') {
+      icon = '\\ud83d\\udd0d'; displayName = 'Glob';
+      summary = input.pattern || '';
+    } else if (name === 'Edit' || name === 'edit_file') {
+      icon = '\\u270f\\ufe0f'; displayName = 'Edit';
+      summary = input.file_path || input.filePath || '';
+    } else if (name === 'Write' || name === 'write_file') {
+      icon = '\\ud83d\\udcdd'; displayName = 'Write';
+      summary = input.file_path || input.filePath || '';
+    } else if (name === 'Bash') {
+      icon = '\\u26a1'; displayName = 'Bash';
+      summary = truncate(input.command || '', 100);
+    } else if (name === 'Agent') {
+      icon = '\\ud83e\\udd16'; displayName = 'Agent';
+      summary = truncate(input.description || input.prompt || '', 80);
+    } else if (name === 'AskUserQuestion') {
+      icon = '\\ud83d\\udcac'; displayName = 'Ask';
+      summary = input.question || '';
+    } else if (name === 'WebFetch') {
+      icon = '\\ud83c\\udf10'; displayName = 'Fetch';
+      summary = input.url || '';
+    } else if (name === 'WebSearch') {
+      icon = '\\ud83c\\udf10'; displayName = 'Search';
+      summary = input.query || '';
+    } else if (name === 'Skill') {
+      icon = '\\ud83c\\udfaf'; displayName = 'Skill';
+      summary = input.skill || input.name || '';
+    } else if (name === 'TaskCreate') {
+      icon = '\\ud83d\\udccb'; displayName = 'Task';
+      summary = input.subject || '';
+    } else if (name === 'TaskUpdate') {
+      icon = '\\ud83d\\udccb'; displayName = 'Task';
+      summary = '#' + (input.taskId || '?') + (input.status ? ' \\u2192 ' + input.status : '');
+    } else if (name === 'LSP') {
+      icon = '\\ud83d\\udd17'; displayName = 'LSP';
+      summary = (input.operation || '') + ' ' + (input.filePath || '') + (input.line ? ':' + input.line : '');
+    } else if (name === 'SendMessage') {
+      icon = '\\ud83d\\udcac'; displayName = 'Msg';
+      summary = '\\u2192 ' + (input.to || '?') + ': ' + truncate(typeof input.message === 'string' ? input.message : '', 60);
+    } else if (name && name.indexOf('mcp__') === 0) {
+      icon = '\\ud83d\\udd0c'; displayName = name.replace(/^mcp__/, '').replace(/__/g, '.').replace(/_/g, ' ');
+      displayName = truncate(displayName, 30);
+      var keys = Object.keys(input);
+      summary = keys.length > 0 ? truncate(String(input[keys[0]] || ''), 60) : '';
+    } else {
+      icon = '\\ud83d\\udd27'; displayName = name || '?';
+      var ukeys = Object.keys(input);
+      summary = ukeys.length > 0 ? truncate(String(input[ukeys[0]] || ''), 60) : '';
+    }
+    return { icon: icon, displayName: displayName, summary: summary };
+  }
+
+  function getRequestBadges(req) {
+    var badges = [];
+    if (!req.toolCalls || !req.toolCalls.length) return badges;
+    var seen = {};
+    for (var i = 0; i < req.toolCalls.length; i++) {
+      var n = req.toolCalls[i].name || '';
+      if (n === 'Bash' && !seen.bash) { badges.push({ label: 'bash', color: '#f0883e' }); seen.bash = true; }
+      else if ((n === 'Edit' || n === 'edit_file' || n === 'Write' || n === 'write_file') && !seen.edit) { badges.push({ label: 'edit', color: '#a371f7' }); seen.edit = true; }
+      else if ((n === 'Read' || n === 'read_file' || n === 'Grep' || n === 'Glob') && !seen.read) { badges.push({ label: 'read', color: '#58a6ff' }); seen.read = true; }
+      else if (n === 'Agent' && !seen.agent) { badges.push({ label: 'agent', color: '#3fb950' }); seen.agent = true; }
+      else if ((n === 'WebFetch' || n === 'WebSearch') && !seen.web) { badges.push({ label: 'web', color: '#d2a8ff' }); seen.web = true; }
+      else if (n === 'LSP' && !seen.lsp) { badges.push({ label: 'lsp', color: '#79c0ff' }); seen.lsp = true; }
+      else if (n.indexOf('mcp__') === 0 && !seen.mcp) { badges.push({ label: 'mcp', color: '#f778ba' }); seen.mcp = true; }
+    }
+    return badges;
+  }
+
+  function renderSessionSummary(sess) {
+    var allReqs = getAllRequests(sess);
+    var totalIn = 0, totalOut = 0, totalThink = 0;
+    var toolCounts = {};
+    for (var i = 0; i < allReqs.length; i++) {
+      var r = allReqs[i];
+      totalIn += (r.tokensIn || 0);
+      totalOut += (r.tokensOut || 0);
+      totalThink += (r.thinkingTokens || 0);
+      if (r.toolCalls) {
+        for (var t = 0; t < r.toolCalls.length; t++) {
+          var tn = r.toolCalls[t].name || '?';
+          toolCounts[tn] = (toolCounts[tn] || 0) + 1;
+        }
+      }
+    }
+    var topTools = Object.keys(toolCounts).sort(function(a,b) { return toolCounts[b] - toolCounts[a]; }).slice(0, 5);
+    var toolStr = topTools.map(function(t) { return t + ':' + toolCounts[t]; }).join('  ');
+    var html = '<div class="session-summary-bar">';
+    html += '<span>Requests: <b>' + (sess.totalRequests || 0) + '</b></span>';
+    html += '<span>Cost: <b>' + formatCost(sess.totalCost) + '</b></span>';
+    html += '<span>Tokens: <b>' + formatTokenCount(totalIn) + '</b> in / <b>' + formatTokenCount(totalOut) + '</b> out / <b>' + formatTokenCount(totalThink) + '</b> think</span>';
+    if (toolStr) html += '<span>Tools: ' + esc(toolStr) + '</span>';
+    html += '</div>';
+    return html;
+  }
+
+  function renderContextPanel(sess) {
+    var firstReq = null;
+    if (sess.requests && sess.requests.length) firstReq = sess.requests[0];
+    if (!firstReq) return '';
+
+    var html = '<div class="context-panel">';
+    html += '<div class="context-header" onclick="toggleContext()">';
+    html += '<span>Session Context</span><span id="context-arrow">\\u25b6</span>';
+    html += '</div>';
+    html += '<div class="context-body" id="context-body">';
+
+    // System prompt
+    if (firstReq.systemPrompt) {
+      html += '<div class="context-section">';
+      html += '<div class="context-section-title">System Prompt</div>';
+      html += '<div class="context-pre">' + esc(truncate(firstReq.systemPrompt, 2000)) + '</div>';
+      html += '</div>';
+    }
+
+    // Model config
+    var configParts = [];
+    if (firstReq.model) configParts.push('Model: ' + firstReq.model);
+    if (firstReq.routedModel && firstReq.routedModel !== firstReq.model) configParts.push('Routed: ' + firstReq.routedModel);
+    if (firstReq.maxTokens) configParts.push('Max tokens: ' + firstReq.maxTokens);
+    if (firstReq.thinkingBudget) configParts.push('Thinking budget: ' + firstReq.thinkingBudget);
+    if (configParts.length) {
+      html += '<div class="context-section">';
+      html += '<div class="context-section-title">Model Config</div>';
+      html += '<div class="context-pre">' + esc(configParts.join('\\n')) + '</div>';
+      html += '</div>';
+    }
+
+    // Tools list
+    if (firstReq.toolDefinitions && firstReq.toolDefinitions.length) {
+      html += '<div class="context-section">';
+      html += '<div class="context-section-title">Tools (' + firstReq.toolDefinitions.length + ')</div>';
+      html += '<div class="tool-def-list">';
+      for (var i = 0; i < firstReq.toolDefinitions.length; i++) {
+        var td = firstReq.toolDefinitions[i];
+        html += '<div class="tool-def-item"><span class="tool-def-name">' + esc(td.name || '') + '</span>';
+        if (td.description) html += '<span class="tool-def-desc">' + esc(truncate(td.description, 80)) + '</span>';
+        html += '</div>';
+      }
+      html += '</div></div>';
+    }
+
+    // Auth type
+    if (firstReq.authType || firstReq.apiKeyPrefix) {
+      html += '<div class="context-section">';
+      html += '<div class="context-section-title">Authentication</div>';
+      html += '<span style="color:#8b949e;font-size:12px">' + esc(firstReq.authType || 'API Key') + ' </span>';
+      if (firstReq.apiKeyPrefix) {
+        html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(firstReq.apiKeyPrefix) + '">reveal prefix</span>';
+      }
+      html += '</div>';
+    }
+
+    html += '</div></div>';
+    return html;
+  }
+
+  function getAllRequests(sess) {
+    var reqs = [];
+    if (sess.requests) {
+      for (var i = 0; i < sess.requests.length; i++) reqs.push(sess.requests[i]);
+    }
+    if (sess.children) {
+      for (var c = 0; c < sess.children.length; c++) {
+        var child = sess.children[c];
+        if (child.requests) {
+          for (var j = 0; j < child.requests.length; j++) reqs.push(child.requests[j]);
+        }
+      }
+    }
+    return reqs;
+  }
+
+  // UI interaction handlers
+  window.toggleThinking = function(id) {
+    var el = document.getElementById('thinking-full-' + id);
+    var summary = document.getElementById('thinking-summary-' + id);
+    if (el && summary) {
+      if (el.style.display === 'none' || !el.style.display) {
+        el.style.display = 'block';
+        summary.style.display = 'none';
+      } else {
+        el.style.display = 'none';
+        summary.style.display = 'block';
+      }
+    }
+  };
+
+  window.toggleContext = function() {
+    var body = document.getElementById('context-body');
+    var arrow = document.getElementById('context-arrow');
+    if (body) {
+      body.classList.toggle('open');
+      if (arrow) arrow.textContent = body.classList.contains('open') ? '\\u25bc' : '\\u25b6';
+    }
+  };
+
+  window.revealAuth = function(btn) {
+    var key = btn.getAttribute('data-key');
+    if (key) {
+      btn.textContent = key + '...';
+      btn.style.cursor = 'default';
+      btn.onclick = null;
+    }
+  };
+
   // --- Rendering ---
 
   function renderTabs() {
@@ -245,6 +507,61 @@ export function getLiveSessionHTML(): string {
     }
   }
 
+  function renderCostBar(req) {
+    var tin = req.tokensIn || 0;
+    var tout = req.tokensOut || 0;
+    var tthink = req.thinkingTokens || 0;
+    var total = tin + tout + tthink;
+    if (total === 0) return '';
+    var pThink = (tthink / total * 100).toFixed(1);
+    var pIn = (tin / total * 100).toFixed(1);
+    var pOut = (tout / total * 100).toFixed(1);
+    return '<div class="cost-bar" style="margin:0 14px">'
+      + '<div class="seg-thinking" style="width:' + pThink + '%"></div>'
+      + '<div class="seg-input" style="width:' + pIn + '%"></div>'
+      + '<div class="seg-output" style="width:' + pOut + '%"></div>'
+      + '</div>';
+  }
+
+  function renderToolCallRich(tc) {
+    var inputData = tc.inputFull || tc.inputPreview || '';
+    var parsed = parseToolCallDisplay(tc.name, inputData);
+    return '<div class="tool-call-rich">'
+      + '<span class="tool-icon">' + parsed.icon + '</span>'
+      + '<span class="tool-display-name">' + esc(parsed.displayName) + '</span>'
+      + '<span class="tool-summary">' + esc(truncate(parsed.summary, 120)) + '</span>'
+      + '</div>';
+  }
+
+  function renderThinkingBlock(req, isStreaming) {
+    var id = req.id || '';
+    var thinkingText = req.thinkingContent || '';
+    if (!thinkingText && !isStreaming) return '';
+
+    if (isStreaming) {
+      var streamClass = ' streaming';
+      var html = '<div class="thinking-block' + streamClass + '" id="thinking-' + esc(id) + '">';
+      html += '<div class="thinking-label">Thinking</div>';
+      html += '<div class="thinking-text" id="thinking-text-' + esc(id) + '">' + esc(thinkingText);
+      html += '<span class="streaming-indicator"></span>';
+      html += '</div></div>';
+      return html;
+    }
+
+    // Non-streaming: show summary + expandable full text
+    var firstSentence = thinkingText.split(/[.!?\\n]/)[0] || '';
+    firstSentence = truncate(firstSentence.trim(), 120);
+
+    var html = '<div class="thinking-summary" id="thinking-summary-' + esc(id) + '" onclick="toggleThinking(\\'' + esc(id) + '\\')">';
+    html += '\\ud83d\\udcad ' + esc(firstSentence) + (thinkingText.length > firstSentence.length ? '...' : '');
+    html += '</div>';
+    html += '<div class="thinking-block" id="thinking-full-' + esc(id) + '" style="display:none">';
+    html += '<div class="thinking-label">Thinking</div>';
+    html += '<div class="thinking-text">' + esc(thinkingText) + '</div>';
+    html += '</div>';
+    return html;
+  }
+
   function renderRequestCard(req, isStreaming) {
     var id = req.id || '';
     var expanded = isStreaming;
@@ -252,6 +569,13 @@ export function getLiveSessionHTML(): string {
     html += '<div class="request-header" onclick="toggleExpand(this)">';
     html += '<span class="req-time">' + esc(formatTime(req.timestamp)) + '</span>';
     html += '<span class="req-model">' + esc(req.model || req.routedModel || '?') + '</span>';
+
+    // Badges
+    var badges = getRequestBadges(req);
+    for (var b = 0; b < badges.length; b++) {
+      html += '<span class="badge" style="background:' + badges[b].color + '">' + esc(badges[b].label) + '</span>';
+    }
+
     html += '<span class="req-message">' + esc(truncate(req.userMessage, 80)) + '</span>';
     if (req.costUsd) html += '<span class="req-cost">' + esc(formatCost(req.costUsd)) + '</span>';
     var tokStr = formatTokens(req.tokensIn, req.tokensOut, req.thinkingTokens);
@@ -259,16 +583,11 @@ export function getLiveSessionHTML(): string {
     if (req.error) html += '<span class="req-error"> ERR</span>';
     html += '</div>';
 
-    // Thinking block — always visible if present
-    var thinkingText = req.thinkingContent || '';
-    if (thinkingText || isStreaming) {
-      var streamClass = isStreaming ? ' streaming' : '';
-      html += '<div class="thinking-block' + streamClass + '" id="thinking-' + esc(id) + '">';
-      html += '<div class="thinking-label">Thinking</div>';
-      html += '<div class="thinking-text" id="thinking-text-' + esc(id) + '">' + esc(thinkingText);
-      if (isStreaming) html += '<span class="streaming-indicator"></span>';
-      html += '</div></div>';
-    }
+    // Cost bar
+    html += renderCostBar(req);
+
+    // Thinking block
+    html += renderThinkingBlock(req, isStreaming);
 
     // Expandable: response + tools
     html += '<div class="expandable' + (expanded ? ' open' : '') + '" id="expand-' + esc(id) + '">';
@@ -277,9 +596,7 @@ export function getLiveSessionHTML(): string {
     }
     if (req.toolCalls && req.toolCalls.length) {
       for (var t = 0; t < req.toolCalls.length; t++) {
-        var tc = req.toolCalls[t];
-        html += '<div class="tool-call"><span class="tool-name">' + esc(tc.name) + '</span>'
-          + '<span class="tool-input">' + esc(truncate(tc.inputPreview || '', 120)) + '</span></div>';
+        html += renderToolCallRich(req.toolCalls[t]);
       }
     }
     html += '</div>';
@@ -296,12 +613,11 @@ export function getLiveSessionHTML(): string {
     var sess = sessions[activeSessionId];
     var html = '';
 
-    // Session summary
-    html += '<div class="session-summary">';
-    html += '<span>Session: ' + esc(truncate(sess.sessionId, 24)) + '</span>';
-    html += '<span>Requests: ' + (sess.totalRequests || 0) + '</span>';
-    html += '<span>Cost: ' + formatCost(sess.totalCost) + '</span>';
-    html += '</div>';
+    // Context panel at top
+    html += renderContextPanel(sess);
+
+    // Session summary bar
+    html += renderSessionSummary(sess);
 
     // Main agent requests
     if (sess.requests && sess.requests.length) {
@@ -471,7 +787,11 @@ export function getLiveSessionHTML(): string {
       var traceId = data.traceId || data.id;
       var sr = streamingRequests[traceId];
       if (sr) {
-        sr.toolCalls.push({ name: data.name || '?', inputPreview: data.inputPreview || data.input || '' });
+        sr.toolCalls.push({
+          name: data.name || '?',
+          inputPreview: data.inputPreview || data.input || '',
+          inputFull: data.inputFull || data.input || data.inputPreview || ''
+        });
         renderContent();
       }
     });
