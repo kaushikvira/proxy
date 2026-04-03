@@ -3138,6 +3138,7 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
 <table><thead><tr><th>Session ID</th><th>Source</th><th>Started</th><th>Duration</th><th>Requests</th><th>Tokens In</th><th>Tokens Out</th><th>Cost</th><th>Models</th><th>Status</th></tr></thead><tbody id="sessions"></tbody></table>
 </div>
 <div class="section collapsible collapsed" id="token-pool-section"><h2>Token Pool</h2><div id="token-pool-panel"></div></div>
+<div class="section collapsible collapsed" id="token-rotation-section"><h2>Token Rotation</h2><div id="token-rotation-panel"></div></div>
 <div class="section"><h2>Recent Runs <span id="historyLabel" style="font-size:.75rem;color:#64748b;font-weight:400">(7d window, history-capped)</span></h2>
 <table><thead><tr><th>Time</th><th>Agent</th><th>Model</th><th class="col-tt">Task Type</th><th class="col-cx">Complexity</th><th>Tokens In</th><th>Tokens Out</th><th class="col-cache">Cache Create</th><th class="col-cache">Cache Read</th><th>Cost</th><th>Latency</th><th>Status</th></tr></thead><tbody id="runs"></tbody></table></div>
 <script>
@@ -3334,7 +3335,31 @@ async function loadTokenPool(){
       }).join('')+'</tbody></table>';
   }catch(e){console.error('token pool load error',e)}
 }
-load();loadLearning();loadSessions();loadTokenPool();setInterval(load,5000);setInterval(loadLearning,30000);setInterval(loadSessions,10000);setInterval(loadTokenPool,10000);
+async function loadTokenRotation(){
+  try{
+    const d=await fetch('/api/token-stats').then(r=>r.json()).catch(()=>null);
+    const el=$('token-rotation-panel');
+    if(!el||!d)return;
+    let html='<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px">';
+    html+='<div><span style="color:#64748b;font-size:.75rem">Current Token Age</span><div style="font-size:1.1rem;font-weight:600;color:#e2e8f0">'+esc(d.currentTokenAge||'—')+'</div></div>';
+    html+='<div><span style="color:#64748b;font-size:.75rem">Requests on Token</span><div style="font-size:1.1rem;font-weight:600;color:#e2e8f0">'+(d.currentTokenRequests||0)+'</div></div>';
+    html+='<div><span style="color:#64748b;font-size:.75rem">Total Rotations</span><div style="font-size:1.1rem;font-weight:600;color:#e2e8f0">'+(d.totalRotations||0)+'</div></div>';
+    if(d.averageRotation){html+='<div><span style="color:#64748b;font-size:.75rem">Avg Rotation Interval</span><div style="font-size:1.1rem;font-weight:600;color:#60a5fa">'+esc(d.averageRotation)+'</div></div>';}
+    html+='</div>';
+    if(d.rotationHistory&&d.rotationHistory.length>0){
+      html+='<table><thead><tr><th>Token</th><th>Duration</th><th>Requests</th><th>First Seen</th><th>Last Seen</th></tr></thead><tbody>';
+      for(let i=d.rotationHistory.length-1;i>=0;i--){
+        const r=d.rotationHistory[i];
+        html+='<tr><td style="font-family:monospace;font-size:.75rem">'+esc(r.token)+'</td><td>'+esc(r.duration)+'</td><td>'+r.requests+'</td><td>'+esc(new Date(r.firstSeen).toLocaleString())+'</td><td>'+esc(new Date(r.lastSeen).toLocaleString())+'</td></tr>';
+      }
+      html+='</tbody></table>';
+    } else {
+      html+='<div style="color:#64748b;font-size:.85rem">No rotations detected yet. Keep the proxy running to observe token rotation patterns.</div>';
+    }
+    el.innerHTML=html;
+  }catch(e){console.error('token rotation load error',e)}
+}
+load();loadLearning();loadSessions();loadTokenPool();loadTokenRotation();setInterval(load,5000);setInterval(loadLearning,30000);setInterval(loadSessions,10000);setInterval(loadTokenPool,10000);setInterval(loadTokenRotation,10000);
 </script><footer style="text-align:center;padding:20px 0;color:#475569;font-size:.75rem;border-top:1px solid #1e293b;margin-top:20px">🔒 Request content stays on your machine. Never sent to cloud.</footer></body></html>`;
 }
 
