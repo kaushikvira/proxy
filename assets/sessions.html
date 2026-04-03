@@ -198,6 +198,16 @@
   .tool-def-name { color: #ffa657; font-weight: 600; }
   .tool-def-desc { color: #6e7681; margin-left: 8px; }
 
+  /* New activity banner */
+  .new-activity-banner {
+    position: sticky; top: 0; z-index: 10;
+    background: #1f6feb; color: #fff; text-align: center;
+    padding: 6px 12px; font-size: 12px; font-weight: 600;
+    cursor: pointer; border-radius: 0 0 6px 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  .new-activity-banner:hover { background: #388bfd; }
+
   /* Markdown rendering */
   .md code { background: #1c2128; color: #f0883e; padding: 1px 5px; border-radius: 3px; font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; }
   .md pre { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; }
@@ -244,6 +254,7 @@
   let activeSessionId = null;
   let userScrolledUp = false;
   let streamingRequests = {}; // traceId -> { sessionId, thinking, text, toolCalls }
+  let newRequestCount = 0;    // requests arrived while user is scrolled up reading
   let expandedCards = {};    // id -> true (persists across re-renders)
   let expandedThinking = {}; // id -> true
   let contextOpen = false;   // context panel state
@@ -894,9 +905,50 @@
       }
     }
 
+    // Scroll anchoring: if user is reading (scrolled up), preserve their position
+    var anchorId = null;
+    var anchorOffset = 0;
+    if (userScrolledUp) {
+      var cards = contentEl.querySelectorAll('.request-card');
+      var contentRect = contentEl.getBoundingClientRect();
+      for (var ai = 0; ai < cards.length; ai++) {
+        var cardRect = cards[ai].getBoundingClientRect();
+        if (cardRect.top >= contentRect.top - 10) {
+          anchorId = cards[ai].id;
+          anchorOffset = cardRect.top - contentRect.top;
+          break;
+        }
+      }
+    }
+
+    // Show "new activity" banner when user is scrolled up reading
+    if (userScrolledUp && newRequestCount > 0) {
+      html = '<div class="new-activity-banner" onclick="scrollToTop()">\u2191 ' + newRequestCount + ' new request' + (newRequestCount > 1 ? 's' : '') + ' \u2014 click to jump to top</div>' + html;
+    }
+
     contentEl.innerHTML = html;
-    maybeAutoScroll();
+
+    // Restore scroll position to anchored card
+    if (anchorId && userScrolledUp) {
+      var anchorEl = document.getElementById(anchorId);
+      if (anchorEl) {
+        var newCardRect = anchorEl.getBoundingClientRect();
+        var newContentRect = contentEl.getBoundingClientRect();
+        var currentOffset = newCardRect.top - newContentRect.top;
+        contentEl.scrollTop += (currentOffset - anchorOffset);
+      }
+    } else {
+      maybeAutoScroll();
+    }
   }
+
+  window.scrollToTop = function() {
+    var contentEl = document.getElementById('content');
+    contentEl.scrollTop = 0;
+    userScrolledUp = false;
+    newRequestCount = 0;
+    renderContent();
+  };
 
   // Toggle expand for response/tool sections (persists across re-renders)
   window.toggleExpand = function(headerEl) {
@@ -915,7 +967,9 @@
     contentEl.addEventListener('scroll', function() {
       var el = this;
       var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      var atTop = el.scrollTop < 40;
       userScrolledUp = !atBottom;
+      if (atTop) newRequestCount = 0;
     });
   }
 
@@ -1073,6 +1127,8 @@
       sess.isActive = true;
 
       if (!activeSessionId) activeSessionId = sid;
+      if (userScrolledUp && sid === activeSessionId) newRequestCount++;
+      if (!userScrolledUp) newRequestCount = 0;
       renderTabs();
       renderContent();
     });
