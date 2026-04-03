@@ -5725,15 +5725,26 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
                         // Live session capture: tap stream events
                         const liveAcc = getStream(nativeTraceId);
                         if (liveAcc) {
+                          // content_block_start: detect thinking and tool_use blocks
+                          if (evt.type === 'content_block_start' && evt.content_block) {
+                            const blockType = evt.content_block.type;
+                            if (blockType === 'thinking') {
+                              // Thinking block started — deltas will follow
+                              liveAcc.onThinkingDelta(''); // signal start
+                            } else if (blockType === 'redacted_thinking') {
+                              // Thinking happened but content is redacted by API
+                              liveAcc.onThinkingDelta('[thinking redacted by API]\n');
+                            } else if (blockType === 'tool_use') {
+                              liveAcc.onToolCall(evt.content_block.name ?? '', JSON.stringify(evt.content_block.input ?? {}));
+                            }
+                          }
+                          // content_block_delta: stream thinking text, response text, tool args
                           if (evt.type === 'content_block_delta' && evt.delta) {
                             if (evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
                               liveAcc.onThinkingDelta(evt.delta.thinking);
                             } else if (evt.delta.type === 'text_delta' && evt.delta.text) {
                               liveAcc.onTextDelta(evt.delta.text);
                             }
-                          }
-                          if (evt.type === 'content_block_start' && evt.content_block?.type === 'tool_use') {
-                            liveAcc.onToolCall(evt.content_block.name ?? '', JSON.stringify(evt.content_block.input ?? {}));
                           }
                         }
                       } catch {
