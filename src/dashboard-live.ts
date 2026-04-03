@@ -381,8 +381,8 @@ export function getLiveSessionHTML(): string {
     // System prompt
     if (firstReq.systemPrompt) {
       html += '<div class="context-section">';
-      html += '<div class="context-section-title">System Prompt</div>';
-      html += '<div class="context-pre">' + esc(truncate(firstReq.systemPrompt, 2000)) + '</div>';
+      html += '<div class="context-section-title">System Prompt (' + firstReq.systemPrompt.length + ' chars)</div>';
+      html += '<div class="context-pre">' + esc(firstReq.systemPrompt) + '</div>';
       html += '</div>';
     }
 
