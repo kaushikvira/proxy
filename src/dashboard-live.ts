@@ -426,6 +426,9 @@ export function getLiveSessionHTML(): string {
       html += '</div>';
     }
 
+    // Token rotation stats (loaded async)
+    html += '<div class="context-section" id="token-rotation-section"></div>';
+
     html += '</div></div>';
     return html;
   }
@@ -760,6 +763,12 @@ export function getLiveSessionHTML(): string {
       // Keep-alive, no action needed
     });
 
+    evtSource.addEventListener('token.rotated', function(e) {
+      var data = JSON.parse(e.data);
+      tokenRotations.push(data);
+      loadTokenStats();
+    });
+
     evtSource.addEventListener('stream.start', function(e) {
       var data = JSON.parse(e.data);
       var traceId = data.traceId || data.id;
@@ -911,9 +920,56 @@ export function getLiveSessionHTML(): string {
     });
   }
 
+  // --- Token rotation display ---
+  var tokenRotations = [];
+
+  function loadTokenStats() {
+    fetch('/api/token-stats').then(function(r) { return r.json(); }).then(function(d) {
+      var el = document.getElementById('token-rotation-section');
+      if (!el) return;
+      var html = '<div class="context-section-title">Token Rotation</div>';
+      html += '<div style="font-size:12px;color:#8b949e">';
+      html += 'Current token age: <strong style="color:#c9d1d9">' + esc(d.currentTokenAge || '?') + '</strong>';
+      html += ' · Requests: <strong style="color:#c9d1d9">' + (d.currentTokenRequests || 0) + '</strong>';
+      html += ' · Rotations: <strong style="color:#c9d1d9">' + (d.totalRotations || 0) + '</strong>';
+      if (d.averageRotation) {
+        html += ' · Avg interval: <strong style="color:#c9d1d9">' + esc(d.averageRotation) + '</strong>';
+      }
+      html += '</div>';
+      if (d.rotationHistory && d.rotationHistory.length > 0) {
+        html += '<div style="margin-top:6px;font-size:11px;max-height:150px;overflow-y:auto">';
+        for (var i = d.rotationHistory.length - 1; i >= 0; i--) {
+          var r = d.rotationHistory[i];
+          html += '<div style="padding:2px 0;border-bottom:1px solid #21262d;color:#8b949e">';
+          html += '<span style="color:#f0883e">↻</span> ';
+          html += esc(r.token) + ' · lived <strong>' + esc(r.duration) + '</strong> · ' + r.requests + ' reqs';
+          html += ' <span style="color:#6e7681">(' + esc(new Date(r.firstSeen).toLocaleTimeString()) + ')</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      // Show live rotation events
+      if (tokenRotations.length > 0) {
+        html += '<div style="margin-top:6px">';
+        for (var j = tokenRotations.length - 1; j >= 0; j--) {
+          var evt = tokenRotations[j];
+          html += '<div style="padding:3px 0;font-size:11px;color:#3fb950">';
+          html += '<strong>↻ ROTATED</strong> ' + esc(evt.oldToken) + ' → ' + esc(evt.newToken);
+          html += ' (lived ' + esc(evt.oldDuration) + ', ' + evt.oldRequests + ' reqs)';
+          html += ' <span style="color:#6e7681">' + esc(new Date(evt.timestamp).toLocaleTimeString()) + '</span>';
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+      el.innerHTML = html;
+    }).catch(function() {});
+  }
+
   // --- Init ---
   setupAutoScroll();
   loadSessions();
+  loadTokenStats();
+  setInterval(loadTokenStats, 10000);
   connectSSE();
 })();
 </script>

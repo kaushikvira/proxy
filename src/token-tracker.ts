@@ -56,7 +56,23 @@ class TokenTracker {
 
     // Token changed — rotation detected
     const oldDuration = this.current.lastSeen - this.current.firstSeen;
-    console.log(`[TOKEN] Rotation detected! ${mask(this.current.token)} → ${mask(token)} (old token lived ${formatDuration(oldDuration)}, ${this.current.requestCount} requests)`);
+    const rotationMsg = `${mask(this.current.token)} → ${mask(token)} (old token lived ${formatDuration(oldDuration)}, ${this.current.requestCount} requests)`;
+    console.log(`[TOKEN] Rotation detected! ${rotationMsg}`);
+
+    // Emit SSE event for live dashboard
+    try {
+      const { getLiveEventBus } = require('./live-events.js');
+      getLiveEventBus().emit('token.rotated', {
+        oldToken: mask(this.current.token),
+        newToken: mask(token),
+        oldDuration: formatDuration(oldDuration),
+        oldDurationMs: oldDuration,
+        oldRequests: this.current.requestCount,
+        totalRotations: this.history.length + 1,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {}
+
 
     this.history.push({ ...this.current });
     this.current = { token, firstSeen: now, lastSeen: now, requestCount: 1 };
