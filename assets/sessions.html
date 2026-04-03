@@ -200,11 +200,11 @@
 
   /* New activity banner */
   .new-activity-banner {
-    position: sticky; top: 0; z-index: 10;
+    position: sticky; bottom: 0; z-index: 10;
     background: #1f6feb; color: #fff; text-align: center;
     padding: 6px 12px; font-size: 12px; font-weight: 600;
-    cursor: pointer; border-radius: 0 0 6px 6px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    cursor: pointer; border-radius: 6px 6px 0 0;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.3);
   }
   .new-activity-banner:hover { background: #388bfd; }
 
@@ -701,9 +701,12 @@
     return html;
   }
 
-  function renderRequestCard(req, isStreaming) {
+  function renderRequestCard(req, isStreaming, autoExpandIds) {
     var id = req.id || '';
-    var expanded = isStreaming || !!expandedCards[id];
+    // Expand if: streaming, manually toggled open, or auto-expanded (last 2 requests)
+    // If user manually collapsed (expandedCards[id] === false), respect that
+    var manuallySet = expandedCards.hasOwnProperty(id);
+    var expanded = isStreaming || (manuallySet ? !!expandedCards[id] : !!(autoExpandIds && autoExpandIds[id]));
     var html = '<div class="request-card" id="card-' + esc(id) + '">';
     html += '<div class="request-header" onclick="toggleExpand(this)">';
     html += '<span class="req-time">' + esc(formatTime(req.timestamp)) + '</span>';
@@ -848,11 +851,55 @@
     // Session summary bar
     html += renderSessionSummary(sess);
 
-    // Streaming requests first (active, happening right now)
+    // Collect all completed requests to determine auto-expand
+    var allCompleted = [];
+    if (sess.requests) {
+      for (var i = 0; i < sess.requests.length; i++) allCompleted.push(sess.requests[i]);
+    }
+    if (sess.children) {
+      for (var c = 0; c < sess.children.length; c++) {
+        var ch = sess.children[c];
+        if (ch.requests) {
+          for (var j = 0; j < ch.requests.length; j++) allCompleted.push(ch.requests[j]);
+        }
+      }
+    }
+    // Sort chronologically
+    allCompleted.sort(function(a, b) { return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(); });
+
+    // Auto-expand: last 2 completed requests are expanded (unless user manually toggled)
+    var autoExpandIds = {};
+    for (var ae = Math.max(0, allCompleted.length - 2); ae < allCompleted.length; ae++) {
+      if (allCompleted[ae] && allCompleted[ae].id) autoExpandIds[allCompleted[ae].id] = true;
+    }
+
+    // Main agent requests (chronological — oldest first, newest at bottom)
+    if (sess.requests && sess.requests.length) {
+      for (var i2 = 0; i2 < sess.requests.length; i2++) {
+        html += renderRequestCard(sess.requests[i2], false, autoExpandIds);
+      }
+    }
+
+    // Subagent groups (chronological within each)
+    if (sess.children && sess.children.length) {
+      for (var c2 = 0; c2 < sess.children.length; c2++) {
+        var child = sess.children[c2];
+        html += '<div class="subagent-group">';
+        html += '<div class="subagent-label">' + esc(child.agentLabel || 'Subagent') + '</div>';
+        if (child.requests) {
+          for (var r = 0; r < child.requests.length; r++) {
+            html += renderRequestCard(child.requests[r], false, autoExpandIds);
+          }
+        }
+        html += '</div>';
+      }
+    }
+
+    // Streaming requests at the bottom (active, happening right now — always expanded)
     var streamIds = Object.keys(streamingRequests);
     for (var si = 0; si < streamIds.length; si++) {
       var sr = streamingRequests[streamIds[si]];
-      if (sr.sessionId === activeSessionId && !sr.parentTraceId) {
+      if (sr.sessionId === activeSessionId) {
         html += renderRequestCard({
           id: streamIds[si],
           timestamp: sr.timestamp || new Date().toISOString(),
@@ -862,92 +909,24 @@
           responseText: sr.text || '',
           toolCalls: sr.toolCalls || [],
           tokensIn: 0, tokensOut: 0, thinkingTokens: 0, costUsd: 0
-        }, true);
+        }, true, {});
       }
     }
 
-    // Main agent requests (newest first)
-    if (sess.requests && sess.requests.length) {
-      for (var i = sess.requests.length - 1; i >= 0; i--) {
-        html += renderRequestCard(sess.requests[i], false);
-      }
-    }
-
-    // Subagent groups (newest first within each group)
-    if (sess.children && sess.children.length) {
-      for (var c = 0; c < sess.children.length; c++) {
-        var child = sess.children[c];
-        html += '<div class="subagent-group">';
-        html += '<div class="subagent-label">' + esc(child.agentLabel || 'Subagent') + '</div>';
-        // Streaming subagent requests first
-        for (var si2 = 0; si2 < streamIds.length; si2++) {
-          var sr2 = streamingRequests[streamIds[si2]];
-          if (sr2.sessionId === activeSessionId && sr2.parentTraceId && sr2.agentFingerprint === child.agentFingerprint) {
-            html += renderRequestCard({
-              id: streamIds[si2],
-              timestamp: sr2.timestamp || new Date().toISOString(),
-              model: sr2.model || '',
-              userMessage: sr2.userMessage || '',
-              thinkingContent: sr2.thinking || '',
-              responseText: sr2.text || '',
-              toolCalls: sr2.toolCalls || [],
-              tokensIn: 0, tokensOut: 0, thinkingTokens: 0, costUsd: 0
-            }, true);
-          }
-        }
-        // Then completed requests (newest first)
-        if (child.requests) {
-          for (var r = child.requests.length - 1; r >= 0; r--) {
-            html += renderRequestCard(child.requests[r], false);
-          }
-        }
-        html += '</div>';
-      }
-    }
-
-    // Scroll anchoring: if user is reading (scrolled up), preserve their position
-    var anchorId = null;
-    var anchorOffset = 0;
-    if (userScrolledUp) {
-      var cards = contentEl.querySelectorAll('.request-card');
-      var contentRect = contentEl.getBoundingClientRect();
-      for (var ai = 0; ai < cards.length; ai++) {
-        var cardRect = cards[ai].getBoundingClientRect();
-        if (cardRect.top >= contentRect.top - 10) {
-          anchorId = cards[ai].id;
-          anchorOffset = cardRect.top - contentRect.top;
-          break;
-        }
-      }
-    }
-
-    // Show "new activity" banner when user is scrolled up reading
+    // "New activity" banner at bottom when user scrolled up
     if (userScrolledUp && newRequestCount > 0) {
-      html = '<div class="new-activity-banner" onclick="scrollToTop()">\u2191 ' + newRequestCount + ' new request' + (newRequestCount > 1 ? 's' : '') + ' \u2014 click to jump to top</div>' + html;
+      html += '<div class="new-activity-banner" onclick="scrollToBottom()">\u2193 ' + newRequestCount + ' new request' + (newRequestCount > 1 ? 's' : '') + ' \u2014 click to jump to latest</div>';
     }
 
     contentEl.innerHTML = html;
-
-    // Restore scroll position to anchored card
-    if (anchorId && userScrolledUp) {
-      var anchorEl = document.getElementById(anchorId);
-      if (anchorEl) {
-        var newCardRect = anchorEl.getBoundingClientRect();
-        var newContentRect = contentEl.getBoundingClientRect();
-        var currentOffset = newCardRect.top - newContentRect.top;
-        contentEl.scrollTop += (currentOffset - anchorOffset);
-      }
-    } else {
-      maybeAutoScroll();
-    }
+    maybeAutoScroll();
   }
 
-  window.scrollToTop = function() {
+  window.scrollToBottom = function() {
     var contentEl = document.getElementById('content');
-    contentEl.scrollTop = 0;
+    contentEl.scrollTop = contentEl.scrollHeight;
     userScrolledUp = false;
     newRequestCount = 0;
-    renderContent();
   };
 
   // Toggle expand for response/tool sections (persists across re-renders)
@@ -967,9 +946,8 @@
     contentEl.addEventListener('scroll', function() {
       var el = this;
       var atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-      var atTop = el.scrollTop < 40;
       userScrolledUp = !atBottom;
-      if (atTop) newRequestCount = 0;
+      if (atBottom) newRequestCount = 0;
     });
   }
 
