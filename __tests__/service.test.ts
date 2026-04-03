@@ -77,7 +77,7 @@ describe('Service content generation (SUDO_USER / user detection)', () => {
     const envFileLines = [
       `EnvironmentFile=-${serviceHome}/.env`,
       `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
-      `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+      `EnvironmentFile=-${serviceHome}/.kv-local-proxy/.env`,
     ].join('\n');
 
     const envLines = ''; // no API keys in test env
@@ -117,7 +117,7 @@ WantedBy=multi-user.target
     const content = buildServiceContent('alice');
     expect(content).toContain('EnvironmentFile=-/home/alice/.env');
     expect(content).toContain('EnvironmentFile=-/home/alice/.openclaw/.env');
-    expect(content).toContain('EnvironmentFile=-/home/alice/.relayplane/.env');
+    expect(content).toContain('EnvironmentFile=-/home/alice/.kv-local-proxy/.env');
   });
 
   it('falls back to USER when SUDO_USER is not set', () => {

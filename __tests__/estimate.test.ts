@@ -98,7 +98,7 @@ describe('countMessagesTokens', () => {
 
 describe('estimateChatRequest', () => {
   it('uses max_tokens when provided', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = estimateChatRequest({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -113,7 +113,7 @@ describe('estimateChatRequest', () => {
   });
 
   it('defaults output to 1.5x input when max_tokens not specified', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const messages = [{ role: 'user', content: 'a'.repeat(40) }]; // 10 tokens + 4 overhead = 14
       const result = estimateChatRequest({ model: 'gpt-4o', messages });
       const expectedOutput = Math.ceil(14 * 1.5); // 21
@@ -122,7 +122,7 @@ describe('estimateChatRequest', () => {
   });
 
   it('calculates cost using the MODEL_PRICING table', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const pricing = MODEL_PRICING['gpt-4o'];
       expect(pricing).toBeDefined();
 
@@ -143,7 +143,7 @@ describe('estimateChatRequest', () => {
   });
 
   it('returns numeric cost (not NaN or negative)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = estimateChatRequest({
         model: 'claude-sonnet-4-6',
         messages: [{ role: 'user', content: 'Write me a poem' }],
@@ -163,7 +163,7 @@ describe('estimateChatRequest', () => {
 
 describe('handleEstimateRequest — Pro gate', () => {
   it('returns 402 for free-tier users (no env override, no credentials)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', undefined, () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', undefined, () => {
       const result = handleEstimateRequest(
         JSON.stringify({
           model: 'gpt-4o',
@@ -177,7 +177,7 @@ describe('handleEstimateRequest — Pro gate', () => {
   });
 
   it('returns 200 for Pro users (env override = true)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', 'true', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', 'true', () => {
       const result = handleEstimateRequest(
         JSON.stringify({
           model: 'gpt-4o',
@@ -190,7 +190,7 @@ describe('handleEstimateRequest — Pro gate', () => {
   });
 
   it('402 response includes upgrade URL', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '0', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '0', () => {
       const result = handleEstimateRequest(
         JSON.stringify({
           model: 'gpt-4o',
@@ -211,7 +211,7 @@ describe('handleEstimateRequest — Pro gate', () => {
 
 describe('Unknown model handling', () => {
   it('returns a cost estimate for an unknown model (uses default pricing)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = estimateChatRequest({
         model: 'unknown-model-xyz-99',
         messages: [{ role: 'user', content: 'Hello' }],
@@ -229,7 +229,7 @@ describe('Unknown model handling', () => {
   });
 
   it('still returns full response shape for unknown models', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = estimateChatRequest({
         model: 'totally-made-up-model',
         messages: [{ role: 'user', content: 'Test' }],
@@ -360,12 +360,12 @@ describe('MCP relay_estimate_cost tool integration', () => {
 // Security fixes (sentinel findings)
 // ---------------------------------------------------------------------------
 
-// Fix #2: RELAYPLANE_PRO_ESTIMATE env bypass blocked in production
+// Fix #2: LLM_PROXY_PRO_ESTIMATE env bypass blocked in production
 describe('isProTier — production env override gate (Fix #2)', () => {
   it('env override is NOT respected when NODE_ENV=production', () => {
     const origNode = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
-    withEnv('RELAYPLANE_PRO_ESTIMATE', 'true', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', 'true', () => {
       // In production the env override must be ignored; credentials don't exist, so returns false
       expect(isProTier()).toBe(false);
     });
@@ -375,7 +375,7 @@ describe('isProTier — production env override gate (Fix #2)', () => {
   it('env override IS respected when NODE_ENV=test', () => {
     const origNode = process.env.NODE_ENV;
     process.env.NODE_ENV = 'test';
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       expect(isProTier()).toBe(true);
     });
     process.env.NODE_ENV = origNode;
@@ -385,7 +385,7 @@ describe('isProTier — production env override gate (Fix #2)', () => {
 // Fix #5: Unbounded max_tokens validation
 describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   it('returns 400 invalid_request for max_tokens = 0', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: 0 })
       );
@@ -396,7 +396,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   });
 
   it('returns 400 invalid_request for max_tokens = -1', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: -1 })
       );
@@ -406,7 +406,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   });
 
   it('returns 400 invalid_request for max_tokens > 200000', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: 999_999 })
       );
@@ -416,7 +416,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   });
 
   it('returns 400 invalid_request for max_tokens = Infinity', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       // JSON.stringify converts Infinity to null — test the boundary separately
       const body = '{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}],"max_tokens":1e400}';
       const result = handleEstimateRequest(body);
@@ -427,7 +427,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   });
 
   it('accepts max_tokens = 1 (lower bound)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 })
       );
@@ -436,7 +436,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
   });
 
   it('accepts max_tokens = 200000 (upper bound)', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }], max_tokens: 200_000 })
       );
@@ -448,7 +448,7 @@ describe('handleEstimateRequest — max_tokens bounds (Fix #5)', () => {
 // Fix #6: Wrong error code on 400 responses
 describe('handleEstimateRequest — correct error codes on 400 (Fix #6)', () => {
   it('returns error: invalid_request (not upgrade_required) for bad JSON', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest('not-valid-json{{{');
       expect(result.status).toBe(400);
       expect((result.body as InvalidRequestError).error).toBe('invalid_request');
@@ -456,7 +456,7 @@ describe('handleEstimateRequest — correct error codes on 400 (Fix #6)', () => 
   });
 
   it('returns error: invalid_request for missing model field', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(
         JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] })
       );
@@ -466,7 +466,7 @@ describe('handleEstimateRequest — correct error codes on 400 (Fix #6)', () => 
   });
 
   it('returns error: invalid_request for missing messages field', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', '1', () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', '1', () => {
       const result = handleEstimateRequest(JSON.stringify({ model: 'gpt-4o' }));
       expect(result.status).toBe(400);
       expect((result.body as InvalidRequestError).error).toBe('invalid_request');
@@ -474,7 +474,7 @@ describe('handleEstimateRequest — correct error codes on 400 (Fix #6)', () => 
   });
 
   it('402 responses still use error: upgrade_required', () => {
-    withEnv('RELAYPLANE_PRO_ESTIMATE', undefined, () => {
+    withEnv('LLM_PROXY_PRO_ESTIMATE', undefined, () => {
       const result = handleEstimateRequest(
         JSON.stringify({ model: 'gpt-4o', messages: [{ role: 'user', content: 'hi' }] })
       );

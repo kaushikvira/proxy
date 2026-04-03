@@ -51,7 +51,7 @@ describe('Launcher', () => {
     const launcherPath = path.resolve(__dirname, '../src/launcher.ts');
 
     child = spawn(findTsxBin(), [launcherPath], {
-      env: { ...process.env, RELAYPLANE_PROXY_PORT: String(port) },
+      env: { ...process.env, LLM_PROXY_PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -69,7 +69,7 @@ describe('Launcher', () => {
     const launcherPath = path.resolve(__dirname, '../src/launcher.ts');
 
     child = spawn(findTsxBin(), [launcherPath], {
-      env: { ...process.env, RELAYPLANE_PROXY_PORT: String(port) },
+      env: { ...process.env, LLM_PROXY_PORT: String(port) },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

@@ -12,22 +12,22 @@ import * as path from 'path';
 import * as os from 'os';
 
 // We need to mock the config dir to avoid touching real config
-const TEST_CONFIG_DIR = path.join(os.tmpdir(), `relayplane-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+const TEST_CONFIG_DIR = path.join(os.tmpdir(), `kv-local-proxy-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 
 // Mock os.homedir to redirect config dir
 vi.mock('os', async () => {
   const actual = await vi.importActual<typeof import('os')>('os');
   return {
     ...actual,
-    homedir: () => path.dirname(TEST_CONFIG_DIR), // so CONFIG_DIR = homedir()/.relayplane
+    homedir: () => path.dirname(TEST_CONFIG_DIR), // so CONFIG_DIR = homedir()/.kv-local-proxy
   };
 });
 
-// We need the dir name to be .relayplane
+// We need the dir name to be .kv-local-proxy
 const MOCK_HOME = path.dirname(TEST_CONFIG_DIR);
 
 describe('Config Resilience', () => {
-  const configDir = path.join(MOCK_HOME, '.relayplane');
+  const configDir = path.join(MOCK_HOME, '.kv-local-proxy');
   const configFile = path.join(configDir, 'config.json');
   const backupFile = path.join(configDir, 'config.json.bak');
   const tmpFile = path.join(configDir, 'config.json.tmp');

@@ -39,7 +39,7 @@ function directSend(): Promise<MiddlewareResponse> {
 }
 
 function countAtoms(testDir: string): number {
-  const dir = path.join(testDir, '.relayplane');
+  const dir = path.join(testDir, '.kv-local-proxy');
   const dbPath = path.join(dir, 'osmosis.db');
   const jsonlPath = path.join(dir, 'osmosis.jsonl');
 
@@ -68,7 +68,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
     testCounter++;
     testDir = path.join(os.tmpdir(), `rp-osmosis-wiring-${process.pid}-${testCounter}`);
     fs.mkdirSync(testDir, { recursive: true });
-    process.env['RELAYPLANE_HOME_OVERRIDE'] = testDir;
+    process.env['LLM_PROXY_HOME'] = testDir;
     _resetStore();
   });
 
@@ -82,7 +82,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
       }
     });
     _resetStore();
-    delete process.env['RELAYPLANE_HOME_OVERRIDE'];
+    delete process.env['LLM_PROXY_HOME'];
     try { fs.rmSync(testDir, { recursive: true, force: true }); } catch { /* ignore */ }
   });
 
@@ -99,7 +99,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
     expect(countAtoms(testDir)).toBe(1);
 
     // Verify it's a success atom with the right model
-    const dir = path.join(testDir, '.relayplane');
+    const dir = path.join(testDir, '.kv-local-proxy');
     const dbPath = path.join(dir, 'osmosis.db');
     const jsonlPath = path.join(dir, 'osmosis.jsonl');
 
@@ -136,7 +136,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
 
     expect(countAtoms(testDir)).toBe(1);
 
-    const dir = path.join(testDir, '.relayplane');
+    const dir = path.join(testDir, '.kv-local-proxy');
     const dbPath = path.join(dir, 'osmosis.db');
     const jsonlPath = path.join(dir, 'osmosis.jsonl');
 
@@ -179,7 +179,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
 
     expect(countAtoms(testDir)).toBe(1);
 
-    const dir = path.join(testDir, '.relayplane');
+    const dir = path.join(testDir, '.kv-local-proxy');
     const dbPath = path.join(dir, 'osmosis.db');
     const jsonlPath = path.join(dir, 'osmosis.jsonl');
 
@@ -200,7 +200,7 @@ describe('Osmosis wiring — captureAtom via middleware', () => {
     mw = new RelayPlaneMiddleware({ enabled: false });
     await mw.route(makeReq({ path: '/v1/messages' }), directSend);
 
-    const dir = path.join(testDir, '.relayplane');
+    const dir = path.join(testDir, '.kv-local-proxy');
     const dbPath = path.join(dir, 'osmosis.db');
     const jsonlPath = path.join(dir, 'osmosis.jsonl');
 
