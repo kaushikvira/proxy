@@ -158,7 +158,7 @@ export function getLiveSessionHTML(): string {
   .tool-call-rich { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #161b22; font-size: 12px; }
   .tool-icon { flex-shrink: 0; }
   .tool-display-name { color: #ffa657; font-weight: 600; min-width: 50px; }
-  .tool-summary { color: #8b949e; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tool-summary { color: #8b949e; word-break: break-all; }
   .bash-viewer { background: #1a1e24; border: 1px solid #30363d; border-radius: 4px; padding: 6px 10px; margin: 4px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; color: #e6edf3; }
   .session-summary-bar { display: flex; gap: 16px; padding: 8px 16px; background: #161b22; border-bottom: 1px solid #21262d; font-size: 12px; color: #8b949e; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
   .session-summary-bar span { white-space: nowrap; }
@@ -207,6 +207,9 @@ export function getLiveSessionHTML(): string {
   let activeSessionId = null;
   let userScrolledUp = false;
   let streamingRequests = {}; // traceId -> { sessionId, thinking, text, toolCalls }
+  let expandedCards = {};    // id -> true (persists across re-renders)
+  let expandedThinking = {}; // id -> true
+  let contextOpen = false;   // context panel state
 
   // XSS-safe escaping
   function esc(s) {
@@ -371,9 +374,9 @@ export function getLiveSessionHTML(): string {
 
     var html = '<div class="context-panel">';
     html += '<div class="context-header" onclick="toggleContext()">';
-    html += '<span>Session Context</span><span id="context-arrow">\\u25b6</span>';
+    html += '<span>Session Context</span><span id="context-arrow">' + (contextOpen ? '\\u25bc' : '\\u25b6') + '</span>';
     html += '</div>';
-    html += '<div class="context-body" id="context-body">';
+    html += '<div class="context-body' + (contextOpen ? ' open' : '') + '" id="context-body">';
 
     // System prompt
     if (firstReq.systemPrompt) {
@@ -443,25 +446,22 @@ export function getLiveSessionHTML(): string {
 
   // UI interaction handlers
   window.toggleThinking = function(id) {
+    expandedThinking[id] = !expandedThinking[id];
     var el = document.getElementById('thinking-full-' + id);
     var summary = document.getElementById('thinking-summary-' + id);
     if (el && summary) {
-      if (el.style.display === 'none' || !el.style.display) {
-        el.style.display = 'block';
-        summary.style.display = 'none';
-      } else {
-        el.style.display = 'none';
-        summary.style.display = 'block';
-      }
+      el.style.display = expandedThinking[id] ? 'block' : 'none';
+      summary.style.display = expandedThinking[id] ? 'none' : 'block';
     }
   };
 
   window.toggleContext = function() {
+    contextOpen = !contextOpen;
     var body = document.getElementById('context-body');
     var arrow = document.getElementById('context-arrow');
     if (body) {
-      body.classList.toggle('open');
-      if (arrow) arrow.textContent = body.classList.contains('open') ? '\\u25bc' : '\\u25b6';
+      if (contextOpen) body.classList.add('open'); else body.classList.remove('open');
+      if (arrow) arrow.textContent = contextOpen ? '\\u25bc' : '\\u25b6';
     }
   };
 
@@ -529,7 +529,7 @@ export function getLiveSessionHTML(): string {
     return '<div class="tool-call-rich">'
       + '<span class="tool-icon">' + parsed.icon + '</span>'
       + '<span class="tool-display-name">' + esc(parsed.displayName) + '</span>'
-      + '<span class="tool-summary">' + esc(truncate(parsed.summary, 120)) + '</span>'
+      + '<span class="tool-summary">' + esc(parsed.summary) + '</span>'
       + '</div>';
   }
 
@@ -552,10 +552,11 @@ export function getLiveSessionHTML(): string {
     var firstSentence = thinkingText.split(/[.!?\\n]/)[0] || '';
     firstSentence = truncate(firstSentence.trim(), 120);
 
-    var html = '<div class="thinking-summary" id="thinking-summary-' + esc(id) + '" onclick="toggleThinking(\\'' + esc(id) + '\\')">';
+    var thinkingExpanded = !!expandedThinking[id];
+    var html = '<div class="thinking-summary" id="thinking-summary-' + esc(id) + '" onclick="toggleThinking(\\'' + esc(id) + '\\')" style="display:' + (thinkingExpanded ? 'none' : 'block') + '">';
     html += '\\ud83d\\udcad ' + esc(firstSentence) + (thinkingText.length > firstSentence.length ? '...' : '');
     html += '</div>';
-    html += '<div class="thinking-block" id="thinking-full-' + esc(id) + '" style="display:none">';
+    html += '<div class="thinking-block" id="thinking-full-' + esc(id) + '" style="display:' + (thinkingExpanded ? 'block' : 'none') + '">';
     html += '<div class="thinking-label">Thinking</div>';
     html += '<div class="thinking-text">' + esc(thinkingText) + '</div>';
     html += '</div>';
@@ -564,7 +565,7 @@ export function getLiveSessionHTML(): string {
 
   function renderRequestCard(req, isStreaming) {
     var id = req.id || '';
-    var expanded = isStreaming;
+    var expanded = isStreaming || !!expandedCards[id];
     var html = '<div class="request-card" id="card-' + esc(id) + '">';
     html += '<div class="request-header" onclick="toggleExpand(this)">';
     html += '<span class="req-time">' + esc(formatTime(req.timestamp)) + '</span>';
@@ -679,11 +680,15 @@ export function getLiveSessionHTML(): string {
     maybeAutoScroll();
   }
 
-  // Toggle expand for response/tool sections
+  // Toggle expand for response/tool sections (persists across re-renders)
   window.toggleExpand = function(headerEl) {
     var card = headerEl.parentElement;
+    var id = card ? card.id.replace('card-', '') : '';
+    if (id) expandedCards[id] = !expandedCards[id];
     var expandable = card.querySelector('.expandable');
-    if (expandable) expandable.classList.toggle('open');
+    if (expandable) {
+      if (expandedCards[id]) expandable.classList.add('open'); else expandable.classList.remove('open');
+    }
   };
 
   // --- Auto-scroll ---
