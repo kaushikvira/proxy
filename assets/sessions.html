@@ -93,7 +93,10 @@
     background: #1f6feb33; color: #58a6ff; padding: 2px 8px; border-radius: 4px;
     font-size: 11px; font-weight: 600; flex-shrink: 0;
   }
-  .req-message { color: #c9d1d9; flex: 1; }
+  .req-message { color: #f0f6fc; flex: 1; font-size: 14px; font-weight: 500; line-height: 1.4; }
+  .req-message .md { display: inline; }
+  .req-message .md p { display: inline; margin: 0; }
+  .req-message .md code { font-size: 12px; }
   .req-cost-bar-inline { display: inline-flex; height: 6px; width: 60px; border-radius: 3px; overflow: hidden; background: #21262d; flex-shrink: 0; vertical-align: middle; }
   .req-cost { color: #8b949e; font-size: 12px; flex-shrink: 0; }
   .req-tokens { color: #8b949e; font-size: 11px; flex-shrink: 0; }
@@ -751,7 +754,7 @@
       html += '<span class="badge" style="background:' + badges[b].color + '">' + esc(badges[b].label) + '</span>';
     }
 
-    html += '<span class="req-message">' + esc(cleanUserMessage(req.userMessage)) + '</span>';
+    html += '<span class="req-message">' + renderMarkdown(cleanUserMessage(req.userMessage)) + '</span>';
     // Inline cost bar between message and cost
     html += renderInlineCostBar(req);
     if (req.costUsd) html += '<span class="req-cost">' + esc(formatCost(req.costUsd)) + '</span>';
