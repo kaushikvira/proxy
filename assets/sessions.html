@@ -966,25 +966,31 @@
     contentEl.scrollTop = contentEl.scrollHeight;
   }
 
-  // --- In-place streaming updates (avoid full re-render) ---
+  // --- In-place streaming updates with throttled markdown rendering ---
+  var mdRenderTimers = {};
+
   function updateStreamingThinking(traceId, text) {
     var el = document.getElementById('thinking-text-' + traceId);
-    if (el) {
-      el.innerHTML = esc(text) + '<span class="streaming-indicator"></span>';
+    if (!el) return false;
+    var key = 'think-' + traceId;
+    if (!mdRenderTimers[key]) {
+      el.innerHTML = renderMarkdown(text) + '<span class="streaming-indicator"></span>';
       maybeAutoScroll();
-      return true;
+      mdRenderTimers[key] = setTimeout(function() { delete mdRenderTimers[key]; }, 300);
     }
-    return false;
+    return true;
   }
 
   function updateStreamingResponse(traceId, text) {
     var el = document.getElementById('response-text-' + traceId);
-    if (el) {
-      el.textContent = text;
+    if (!el) return false;
+    var key = 'resp-' + traceId;
+    if (!mdRenderTimers[key]) {
+      el.innerHTML = renderMarkdown(text);
       maybeAutoScroll();
-      return true;
+      mdRenderTimers[key] = setTimeout(function() { delete mdRenderTimers[key]; }, 300);
     }
-    return false;
+    return true;
   }
 
   // --- SSE Connection ---
