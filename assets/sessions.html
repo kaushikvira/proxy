@@ -855,6 +855,11 @@
     // Session summary bar
     html += renderSessionSummary(sess);
 
+    // Debug: show request counts
+    var mainCount = sess.requests ? sess.requests.length : 0;
+    var childReqCount = 0;
+    if (sess.children) { for (var dc = 0; dc < sess.children.length; dc++) childReqCount += (sess.children[dc].requests || []).length; }
+
     // Collect all completed requests to determine auto-expand
     var allCompleted = [];
     if (sess.requests) {

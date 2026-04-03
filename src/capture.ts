@@ -139,10 +139,9 @@ export function endStream(traceId: string): CapturedRequest | undefined {
   const acc = activeStreams.get(traceId);
   if (!acc) return undefined;
   activeStreams.delete(traceId);
+  // Emit stream.end BEFORE finalize() so the client removes the streaming
+  // entry before session.updated adds the completed request (avoids duplicate)
+  getLiveEventBus().emit('stream.end', { traceId });
   const captured = acc.finalize();
-  getLiveEventBus().emit('stream.end', {
-    traceId, tokensIn: captured.tokensIn, tokensOut: captured.tokensOut,
-    thinkingTokens: captured.thinkingTokens, costUsd: captured.costUsd, finishReason: captured.finishReason,
-  });
   return captured;
 }
