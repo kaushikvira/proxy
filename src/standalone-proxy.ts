@@ -3121,7 +3121,7 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
 .prov{display:flex;gap:16px;flex-wrap:wrap}.prov-item{display:flex;align-items:center;font-size:.85rem;background:#111318;padding:8px 14px;border-radius:8px;border:1px solid #1e293b}
 .rename-btn{background:none;border:none;cursor:pointer;font-size:.75rem;opacity:.5;padding:2px}.rename-btn:hover{opacity:1}
 </style></head><body>
-<div class="header"><div><h1>⚡ Kaushik's Dashboard</h1></div><div class="meta"><a href="/dashboard/config">Config</a> · <span id="ver"></span><span id="vstat" class="vstat unavailable">Unable to check</span> · up <span id="uptime"></span> · refreshes every 5s</div></div>
+<div class="header"><div><h1>⚡ Kaushik's Dashboard</h1></div><div class="meta"><a href="/sessions">Live Sessions</a> · <a href="/dashboard/config">Config</a> · <span id="ver"></span><span id="vstat" class="vstat unavailable">Unable to check</span> · up <span id="uptime"></span> · refreshes every 5s · <button onclick="copyToken(this)" style="background:#1e293b;border:1px solid #334155;color:#94a3b8;padding:2px 8px;border-radius:4px;cursor:pointer;font-size:.75rem">🔑 Copy Token</button></div></div>
 <div class="cards">
   <div class="card"><div class="label">Requests (7d window, max 10k)</div><div class="value" id="totalReq">—</div><div id="totalReqDetail" style="font-size:.75rem;color:#64748b;margin-top:4px">—</div></div>
   <div class="card"><div class="label">Total Cost</div><div class="value" id="totalCost">—</div></div>
@@ -3143,6 +3143,7 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
 <script>
 const $ = id => document.getElementById(id);
 function esc(s){if(!s)return'';return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+function copyToken(btn){fetch('/api/token-stats').then(function(r){return r.json()}).then(function(d){if(d.currentToken&&navigator.clipboard){navigator.clipboard.writeText(d.currentToken).then(function(){btn.textContent='✅ Copied!';setTimeout(function(){btn.textContent='🔑 Copy Token'},2000);})}else{btn.textContent='No token';setTimeout(function(){btn.textContent='🔑 Copy Token'},2000)}}).catch(function(){btn.textContent='Error';setTimeout(function(){btn.textContent='🔑 Copy Token'},2000)})}
 document.querySelectorAll('.section.collapsible h2').forEach(h2=>h2.addEventListener('click',()=>h2.parentElement.classList.toggle('collapsed')));
 function fmt(n,d=2){return typeof n==='number'?n.toFixed(d):'-'}
 function fmtTime(s){const d=new Date(s);return d.toLocaleTimeString()}
