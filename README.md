@@ -70,6 +70,12 @@ A local HTTP proxy that sits between your AI agents and LLM providers. Drop-in r
 - Auto-downgrade when budget thresholds are hit
 - Per-agent cost tracking by system prompt fingerprint
 - Local dashboard at `localhost:4100`
+- **Live session viewer** at `localhost:4100/sessions` — real-time streaming of Claude's activity
+- **Instrument panel** — context window %, cost velocity, cache hit rate, thinking tokens, throughput
+- **Tool call visualization** — 📖 Read, 🔍 Grep, ⚡ Bash, 🤖 Agent with full commands
+- **Auth token rotation tracking** — monitors OAuth key changes, measures rotation cadence
+- **Context panel** — full system prompt, tool definitions, auth key (copy to clipboard)
+- **Markdown rendering** — inline code, bold, code blocks in real-time streaming
 
 ## Quick Start
 
@@ -78,7 +84,9 @@ npm install
 npm run build
 ```
 
-Set at least one API key:
+No API keys needed — the proxy passes through auth from your client (Claude Code, Cursor, etc.).
+
+Optionally set API keys for direct use:
 
 ```bash
 export ANTHROPIC_API_KEY="sk-ant-..."
@@ -101,7 +109,8 @@ ANTHROPIC_BASE_URL=http://localhost:4100 your-agent
 OPENAI_BASE_URL=http://localhost:4100 your-agent
 ```
 
-Dashboard at http://localhost:4100
+- Dashboard at http://localhost:4100
+- **Live session viewer** at http://localhost:4100/sessions
 
 ## Supported Providers
 
