@@ -1338,6 +1338,30 @@ function extractPromptText(messages: ChatRequest['messages']): string {
     .join('\n');
 }
 
+/**
+ * Extract the last user message from the conversation — this is what
+ * the user actually typed for THIS request, not the full history.
+ */
+function extractLastUserMessage(messages: ChatRequest['messages']): string {
+  if (!messages || !Array.isArray(messages)) return '';
+  // Walk backward to find the last user role message
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role !== 'user') continue;
+    let text = '';
+    if (typeof msg.content === 'string') {
+      text = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      text = (msg.content as Array<{ type?: string; text?: string }>)
+        .filter(c => c.type === 'text')
+        .map(c => c.text ?? '')
+        .join(' ');
+    }
+    if (text.trim()) return text.slice(0, 1000);
+  }
+  return '';
+}
+
 function extractMessageText(messages: Array<{ content?: unknown }>): string {
   return messages
     .map((msg) => {
@@ -5708,7 +5732,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
               model: requestedModel,
               routedModel: targetModel || requestedModel,
               systemPromptPreview: (nativeSystemPrompt ?? '').slice(0, 200),
-              userMessage: extractPromptText(requestBody['messages'] as any[] || []).slice(0, 500),
+              userMessage: extractLastUserMessage(requestBody['messages'] as any[] || []),
               tools: Array.isArray(requestBody['tools']) ? (requestBody['tools'] as any[]).map((t: any) => t?.name ?? '').filter(Boolean) : [],
               agentFingerprint: nativeAgentFingerprint ?? '',
               // Extended metadata
