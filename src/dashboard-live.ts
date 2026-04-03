@@ -529,8 +529,8 @@ export function getLiveSessionHTML(): string {
 
     evtSource.addEventListener('session.updated', function(e) {
       var data = JSON.parse(e.data);
-      if (data.sessionId) {
-        sessions[data.sessionId] = data;
+      if (data.sessionId && data.tree) {
+        sessions[data.sessionId] = data.tree;
         renderTabs();
         if (activeSessionId === data.sessionId) renderContent();
       }
@@ -550,13 +550,14 @@ export function getLiveSessionHTML(): string {
   // --- Load existing sessions ---
   function loadSessions() {
     fetch('/api/sessions').then(function(r) { return r.json(); }).then(function(data) {
-      if (Array.isArray(data)) {
-        for (var i = 0; i < data.length; i++) {
-          var s = data[i];
+      var list = Array.isArray(data) ? data : (data && Array.isArray(data.sessions) ? data.sessions : []);
+      if (list.length > 0) {
+        for (var i = 0; i < list.length; i++) {
+          var s = list[i];
           if (s.sessionId) sessions[s.sessionId] = s;
         }
-        if (!activeSessionId && data.length > 0 && data[0].sessionId) {
-          activeSessionId = data[0].sessionId;
+        if (!activeSessionId && list[0].sessionId) {
+          activeSessionId = list[0].sessionId;
         }
         renderTabs();
         renderContent();
