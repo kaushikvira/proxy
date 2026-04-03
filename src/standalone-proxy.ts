@@ -5795,22 +5795,34 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
                           if (evt.type === 'content_block_start' && evt.content_block) {
                             const blockType = evt.content_block.type;
                             if (blockType === 'thinking') {
-                              // Thinking block started — deltas will follow
-                              liveAcc.onThinkingDelta(''); // signal start
+                              liveAcc.onThinkingDelta('');
                             } else if (blockType === 'redacted_thinking') {
-                              // Thinking happened but content is redacted by API
                               liveAcc.onThinkingDelta('[thinking redacted by API]\n');
                             } else if (blockType === 'tool_use') {
-                              liveAcc.onToolCall(evt.content_block.name ?? '', JSON.stringify(evt.content_block.input ?? {}));
+                              // Start tracking this tool — input arrives via input_json_delta
+                              (liveAcc as any)._currentToolName = evt.content_block.name ?? '';
+                              (liveAcc as any)._currentToolInput = '';
                             }
                           }
-                          // content_block_delta: stream thinking text, response text, tool args
+                          // content_block_delta: stream thinking, text, and tool input
                           if (evt.type === 'content_block_delta' && evt.delta) {
                             if (evt.delta.type === 'thinking_delta' && evt.delta.thinking) {
                               liveAcc.onThinkingDelta(evt.delta.thinking);
                             } else if (evt.delta.type === 'text_delta' && evt.delta.text) {
                               liveAcc.onTextDelta(evt.delta.text);
+                            } else if (evt.delta.type === 'input_json_delta' && evt.delta.partial_json) {
+                              // Accumulate tool input JSON chunks
+                              (liveAcc as any)._currentToolInput = ((liveAcc as any)._currentToolInput || '') + evt.delta.partial_json;
                             }
+                          }
+                          // content_block_stop: finalize tool call with accumulated input
+                          if (evt.type === 'content_block_stop' && (liveAcc as any)._currentToolName) {
+                            liveAcc.onToolCall(
+                              (liveAcc as any)._currentToolName,
+                              (liveAcc as any)._currentToolInput || '{}',
+                            );
+                            (liveAcc as any)._currentToolName = null;
+                            (liveAcc as any)._currentToolInput = '';
                           }
                         }
                       } catch {
