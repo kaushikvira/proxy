@@ -415,12 +415,14 @@ export function getLiveSessionHTML(): string {
 
     // Auth type
     if (firstReq.authType || firstReq.authKeyPreview) {
+      var fullKey = firstReq.authKeyPreview || '';
+      var maskedKey = fullKey.length > 16 ? fullKey.slice(0, 12) + '****...' + fullKey.slice(-4) : '****';
       html += '<div class="context-section">';
       html += '<div class="context-section-title">Authentication</div>';
       html += '<span style="color:#8b949e;font-size:12px">' + esc(firstReq.authType || 'API Key') + ' </span>';
-      if (firstReq.authKeyPreview) {
-        html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(firstReq.authKeyPreview) + '">reveal prefix</span>';
-      }
+      html += '<span id="auth-masked" style="font-family:monospace;font-size:12px;color:#c9d1d9">' + esc(maskedKey) + '</span> ';
+      html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(fullKey) + '">show</span> ';
+      html += '<span class="auth-reveal" onclick="copyAuth(this)" data-key="' + esc(fullKey) + '">copy</span>';
       html += '</div>';
     }
 
@@ -465,12 +467,28 @@ export function getLiveSessionHTML(): string {
     }
   };
 
+  window.copyAuth = function(btn) {
+    var key = btn.getAttribute('data-key');
+    if (key && navigator.clipboard) {
+      navigator.clipboard.writeText(key).then(function() {
+        btn.textContent = 'copied!';
+        setTimeout(function() { btn.textContent = 'copy'; }, 2000);
+      });
+    }
+  };
+
   window.revealAuth = function(btn) {
     var key = btn.getAttribute('data-key');
-    if (key) {
-      btn.textContent = key + '...';
-      btn.style.cursor = 'default';
-      btn.onclick = null;
+    var masked = document.getElementById('auth-masked');
+    if (key && masked) {
+      var isRevealed = btn.textContent === 'hide';
+      if (isRevealed) {
+        masked.textContent = key.length > 16 ? key.slice(0, 12) + '****...' + key.slice(-4) : '****';
+        btn.textContent = 'show';
+      } else {
+        masked.textContent = key;
+        btn.textContent = 'hide';
+      }
     }
   };
 

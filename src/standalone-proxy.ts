@@ -5706,7 +5706,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
                     .map((t: any) => ({ name: String(t.name), description: String(t.description ?? '').slice(0, 200) }))
                 : [],
               authType: ctx.authHeader ? 'oauth' as const : ctx.apiKeyHeader ? 'api-key' as const : 'none' as const,
-              authKeyPreview: maskApiKey(ctx.apiKeyHeader || extractBearerToken(ctx.authHeader)),
+              authKeyPreview: ctx.apiKeyHeader || extractBearerToken(ctx.authHeader) || '',
               thinkingConfig: formatThinkingConfig(requestBody['thinking']),
               maxTokens: typeof requestBody['max_tokens'] === 'number' ? requestBody['max_tokens'] as number : undefined,
             });
