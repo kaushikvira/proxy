@@ -268,6 +268,25 @@
     return d.innerHTML;
   }
 
+  // Strip system-reminder tags and Claude Code metadata from user messages
+  function cleanUserMessage(msg) {
+    if (!msg) return '';
+    // Remove <system-reminder>...</system-reminder> blocks
+    var s = msg.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '');
+    // Remove <local-command-caveat>...</local-command-caveat>
+    s = s.replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/gi, '');
+    // Remove <command-name>...</command-name> etc
+    s = s.replace(/<\/?[a-z-]+>/gi, '');
+    // Trim whitespace
+    s = s.replace(/^\s+/, '').replace(/\s+$/, '');
+    // If nothing left, show first meaningful part of original
+    if (!s && msg.length > 0) {
+      var match = msg.match(/\n\n(.+)/);
+      if (match) s = match[1].trim();
+    }
+    return s || '(system message)';
+  }
+
   // Lightweight markdown renderer — XSS-safe (esc first, then format)
   function renderMarkdown(raw) {
     if (!raw) return '';
@@ -629,8 +648,8 @@
       var dotClass = s.isActive ? 'tab-dot active' : 'tab-dot';
       html += '<div class="tab' + (isActive ? ' active' : '') + '" data-sid="' + esc(ids[i]) + '">'
         + '<span class="' + dotClass + '"></span>'
-        + esc(truncate(ids[i], 16))
-        + ' <span style="color:#8b949e;font-size:11px">(' + (s.totalRequests || 0) + ' reqs, ' + formatCost(s.totalCost) + ')</span>'
+        + 'Session ' + (i + 1)
+        + ' <span style="color:#8b949e;font-size:11px">' + (s.totalRequests || 0) + ' reqs \u00b7 ' + formatCost(s.totalCost) + '</span>'
         + '</div>';
     }
     tabsEl.innerHTML = html;
@@ -708,8 +727,10 @@
     // If user manually collapsed (expandedCards[id] === false), respect that
     var manuallySet = expandedCards.hasOwnProperty(id);
     var expanded = isStreaming || (manuallySet ? !!expandedCards[id] : !!(autoExpandIds && autoExpandIds[id]));
+    var arrow = expanded ? '\u25bc' : '\u25b6';
     var html = '<div class="request-card" id="card-' + esc(id) + '">';
     html += '<div class="request-header" onclick="toggleExpand(this)">';
+    html += '<span style="color:#484f58;font-size:10px;flex-shrink:0;width:12px">' + arrow + '</span>';
     html += '<span class="req-time">' + esc(formatTime(req.timestamp)) + '</span>';
     html += '<span class="req-model">' + esc(req.model || req.routedModel || '?') + '</span>';
 
@@ -719,7 +740,7 @@
       html += '<span class="badge" style="background:' + badges[b].color + '">' + esc(badges[b].label) + '</span>';
     }
 
-    html += '<span class="req-message">' + esc(truncate(req.userMessage, 80)) + '</span>';
+    html += '<span class="req-message">' + esc(truncate(cleanUserMessage(req.userMessage), 80)) + '</span>';
     // Inline cost bar between message and cost
     html += renderInlineCostBar(req);
     if (req.costUsd) html += '<span class="req-cost">' + esc(formatCost(req.costUsd)) + '</span>';
