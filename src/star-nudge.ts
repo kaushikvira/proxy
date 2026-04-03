@@ -5,7 +5,7 @@
  * to stderr encouraging the user to star the GitHub repo.
  *
  * Guarantees:
- *  - Fires exactly once per install (flag written to ~/.relayplane/star-nudge-shown.json)
+ *  - Fires exactly once per install (flag written to ~/.kv-local-proxy/star-nudge-shown.json)
  *  - Prints to stderr — never pollutes proxy response stdout
  *  - Zero added latency — call checkAndShowStarNudge() *after* forwarding the response
  *  - Never throws — all errors are silently swallowed

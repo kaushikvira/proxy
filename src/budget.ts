@@ -163,7 +163,7 @@ export class BudgetManager {
     if (!this.config.enabled) return;
     this._initialized = true;
 
-    const budgetDir = path.join(os.homedir(), '.relayplane');
+    const budgetDir = path.join(os.homedir(), '.kv-local-proxy');
     fs.mkdirSync(budgetDir, { recursive: true });
 
     try {

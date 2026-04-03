@@ -14,7 +14,7 @@ import * as path from 'node:path';
 import { getRelayplaneDir } from './osmosis-store.js';
 
 const PROMOTION_THRESHOLD = 2;
-const EPISODIC_MAX_ROWS = parseInt(process.env['RELAYPLANE_EPISODIC_MAX_ROWS'] ?? '100000', 10);
+const EPISODIC_MAX_ROWS = parseInt(process.env['LLM_PROXY_EPISODIC_MAX_ROWS'] ?? '100000', 10);
 let _writeCounter = 0;
 
 // ── DB handles ──────────────────────────────────────────────────────────────

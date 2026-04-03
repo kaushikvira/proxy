@@ -88,7 +88,7 @@ interface Credentials {
   loggedInAt?: string;
 }
 
-const CREDENTIALS_PATH = join(homedir(), '.relayplane', 'credentials.json');
+const CREDENTIALS_PATH = join(homedir(), '.kv-local-proxy', 'credentials.json');
 
 function loadCredentials(): Credentials | null {
   try {
@@ -355,10 +355,10 @@ function handleEnableDisableCommand(enable: boolean): void {
     }
   }
 
-  if (!config.relayplane || typeof config.relayplane !== 'object') {
-    config.relayplane = {};
+  if (!config.proxy || typeof config.proxy !== 'object') {
+    config.proxy = {};
   }
-  (config.relayplane as Record<string, unknown>).enabled = enable;
+  (config.proxy as Record<string, unknown>).enabled = enable;
 
   writeFileSync(configPath, JSON.stringify(config, null, 2) + '\n');
   console.log(`✅ RelayPlane ${enable ? 'enabled' : 'disabled'}`);
@@ -395,23 +395,23 @@ function handleConfigCommand(args: string[]): void {
 // AUTOSTART COMMAND
 // ============================================
 
-const RELAYPLANE_CONFIG_PATH = join(homedir(), '.relayplane', 'config.json');
+const LLM_PROXY_CONFIG_PATH = join(homedir(), '.kv-local-proxy', 'config.json');
 const SERVICE_NAME = 'relayplane-proxy';
 const SERVICE_PATH = `/etc/systemd/system/${SERVICE_NAME}.service`;
 
 function loadRelayplaneConfig(): Record<string, any> {
   try {
-    if (existsSync(RELAYPLANE_CONFIG_PATH)) {
-      return JSON.parse(readFileSync(RELAYPLANE_CONFIG_PATH, 'utf8'));
+    if (existsSync(LLM_PROXY_CONFIG_PATH)) {
+      return JSON.parse(readFileSync(LLM_PROXY_CONFIG_PATH, 'utf8'));
     }
   } catch {}
   return {};
 }
 
 function saveRelayplaneConfig(config: Record<string, any>): void {
-  const dir = dirname(RELAYPLANE_CONFIG_PATH);
+  const dir = dirname(LLM_PROXY_CONFIG_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(RELAYPLANE_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
+  writeFileSync(LLM_PROXY_CONFIG_PATH, JSON.stringify(config, null, 2) + '\n');
 }
 
 function hasSystemd(): boolean {
@@ -498,7 +498,7 @@ async function handleAutostartCommand(args: string[]): Promise<void> {
     const envFileLines = [
       `EnvironmentFile=-${serviceHome}/.env`,
       `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
-      `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+      `EnvironmentFile=-${serviceHome}/.kv-local-proxy/.env`,
     ].join('\n');
 
     const serviceContent = `[Unit]
@@ -710,7 +710,7 @@ function generateLaunchdPlist(binPath: string): string {
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.relayplane.proxy</string>
+  <string>com.kv-local-proxy.proxy</string>
   <key>ProgramArguments</key>
   <array>
     <string>${binPath}</string>
@@ -809,7 +809,7 @@ async function handleServiceCommand(args: string[]): Promise<void> {
         const envFileLines = [
           `EnvironmentFile=-${serviceHome}/.env`,
           `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
-          `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+          `EnvironmentFile=-${serviceHome}/.kv-local-proxy/.env`,
         ].join('\n');
         serviceContent = serviceContent.replace(/^(Environment=HOME=.*)$/m, `${envFileLines}
 $1`);
@@ -824,7 +824,7 @@ $1`);
         const envFileLines = [
           `EnvironmentFile=-${serviceHome}/.env`,
           `EnvironmentFile=-${serviceHome}/.openclaw/.env`,
-          `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
+          `EnvironmentFile=-${serviceHome}/.kv-local-proxy/.env`,
         ].join('\n');
         serviceContent = `[Unit]
 Description=Local LLM Proxy - Intelligent AI Model Routing
@@ -888,7 +888,7 @@ WantedBy=multi-user.target
       console.log('');
 
     } else if (isMac) {
-      const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.relayplane.proxy.plist');
+      const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.kv-local-proxy.proxy.plist');
 
       const plistContent = generateLaunchdPlist(binPath);
 
@@ -953,7 +953,7 @@ WantedBy=multi-user.target
       console.log('');
 
     } else if (isMac) {
-      const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.relayplane.proxy.plist');
+      const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.kv-local-proxy.proxy.plist');
 
       if (dryRun) {
         console.log('');
@@ -1018,12 +1018,12 @@ WantedBy=multi-user.target
     console.log('');
 
   } else if (isMac) {
-    const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.relayplane.proxy.plist');
+    const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.kv-local-proxy.proxy.plist');
     const installed = existsSync(plistPath);
     let isLoaded = false;
 
     try {
-      const output = execSync('launchctl list com.relayplane.proxy 2>&1', { encoding: 'utf8' });
+      const output = execSync('launchctl list com.kv-local-proxy.proxy 2>&1', { encoding: 'utf8' });
       isLoaded = !output.includes('Could not find');
     } catch {}
 

@@ -90,7 +90,7 @@ export class AlertManager {
     if (!this.config.enabled) return;
     this._initialized = true;
 
-    const dir = path.join(os.homedir(), '.relayplane');
+    const dir = path.join(os.homedir(), '.kv-local-proxy');
     fs.mkdirSync(dir, { recursive: true });
 
     try {

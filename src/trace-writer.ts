@@ -1,8 +1,8 @@
 /**
  * TraceWriter — deterministic per-request trace files for RelayPlane.
  *
- * Writes structured JSONL trace files to ~/.relayplane/traces/{sessionId}/{YYYY-MM-DD}/{traceId}.jsonl
- * and maintains a SQLite index at ~/.relayplane/traces/index.db.
+ * Writes structured JSONL trace files to ~/.kv-local-proxy/traces/{sessionId}/{YYYY-MM-DD}/{traceId}.jsonl
+ * and maintains a SQLite index at ~/.kv-local-proxy/traces/index.db.
  *
  * CAP 3: Deterministic Traces (Phase 2, Session 2)
  */
@@ -132,7 +132,7 @@ export function defaultTracesConfig(): TracesConfig {
     enabled: true,
     storeFullRequests: false,
     retentionDays: 30,
-    directory: path.join(os.homedir(), '.relayplane', 'traces'),
+    directory: path.join(os.homedir(), '.kv-local-proxy', 'traces'),
     maxDiskMb: 500,
   };
 }

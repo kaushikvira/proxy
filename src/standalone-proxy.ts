@@ -769,7 +769,7 @@ interface RelayPlaneProxyConfigFile {
     /**
      * When true, inject top procedural knowledge hints into system prompts.
      * Default: false — no system prompt modification occurs.
-     * Can also be set via env RELAYPLANE_PROCEDURAL_INJECTION=true.
+     * Can also be set via env LLM_PROXY_PROCEDURAL_INJECTION=true.
      */
     proceduralInjectionEnabled?: boolean;
   };
@@ -857,7 +857,7 @@ const HISTORY_RETENTION_DAYS = 7;
 let requestIdCounter = 0;
 
 // --- Persistent history (JSONL) ---
-const HISTORY_DIR = path.join(os.homedir(), '.relayplane');
+const HISTORY_DIR = path.join(os.homedir(), '.kv-local-proxy');
 const HISTORY_FILE = path.join(HISTORY_DIR, 'history.jsonl');
 let historyWriteBuffer: RequestHistoryEntry[] = [];
 let historyFlushTimer: NodeJS.Timeout | null = null;
@@ -1175,18 +1175,18 @@ function isContentLoggingEnabled(): boolean {
  * Whether procedural knowledge hints should be injected into system prompts.
  * Default: false — no system prompt modification occurs.
  * Config file: memory.proceduralInjectionEnabled
- * Env override: RELAYPLANE_PROCEDURAL_INJECTION=true
+ * Env override: LLM_PROXY_PROCEDURAL_INJECTION=true
  */
 function isProceduralInjectionEnabled(): boolean {
-  const envVal = process.env['RELAYPLANE_PROCEDURAL_INJECTION'];
+  const envVal = process.env['LLM_PROXY_PROCEDURAL_INJECTION'];
   if (envVal !== undefined) return envVal === 'true';
   return _activeProxyConfig.memory?.proceduralInjectionEnabled === true;
 }
 
 function getProxyConfigPath(): string {
-  const customPath = process.env['RELAYPLANE_CONFIG_PATH'];
+  const customPath = process.env['LLM_PROXY_CONFIG_PATH'];
   if (customPath && customPath.trim()) return customPath;
-  return path.join(os.homedir(), '.relayplane', 'config.json');
+  return path.join(os.homedir(), '.kv-local-proxy', 'config.json');
 }
 
 function normalizeProxyConfig(config: RelayPlaneProxyConfigFile | null): RelayPlaneProxyConfigFile {
@@ -3038,7 +3038,7 @@ function getQualityModel(config: RelayPlaneProxyConfigFile): string {
   return (
     complexityValToString(config.routing?.complexity?.complex) ||
     config.routing?.cascade?.models?.[config.routing?.cascade?.models?.length ? config.routing.cascade.models.length - 1 : 0] ||
-    process.env['RELAYPLANE_QUALITY_MODEL'] ||
+    process.env['LLM_PROXY_QUALITY_MODEL'] ||
     'claude-sonnet-4-6'
   );
 }
@@ -3317,7 +3317,7 @@ async function loadTokenPool(){
     const el=$('token-pool-panel');
     if(!el)return;
     if(!data||!data.accounts||data.accounts.length===0){
-      el.innerHTML='<div style="color:#64748b;font-size:.85rem">No accounts registered. Add accounts under <code style="background:#1e293b;padding:2px 6px;border-radius:4px">providers.anthropic.accounts[]</code> in ~/.relayplane/config.json for multi-account pooling.</div>';
+      el.innerHTML='<div style="color:#64748b;font-size:.85rem">No accounts registered. Add accounts under <code style="background:#1e293b;padding:2px 6px;border-radius:4px">providers.anthropic.accounts[]</code> in ~/.kv-local-proxy/config.json for multi-account pooling.</div>';
       return;
     }
     el.innerHTML='<table><thead><tr><th>Label</th><th>Source</th><th>Priority</th><th>Type</th><th>Req/min</th><th>RPM Limit</th><th>Status</th></tr></thead><tbody>'+
@@ -3429,7 +3429,7 @@ a{color:#34d399}h1{font-size:1.5rem;font-weight:600}
 .model-pill{display:inline-block;background:#1e293b;padding:4px 10px;border-radius:6px;font-size:.8rem;margin:2px}
 pre.raw{background:#111318;border:1px solid #1e293b;border-radius:8px;padding:16px;overflow-x:auto;font-size:.8rem;color:#94a3b8;max-height:400px;overflow-y:auto}
 </style></head><body>
-<div class="header"><div><h1>⚡ RelayPlane Config</h1></div><div class="meta"><a href="/dashboard">← Dashboard</a> · read-only view of ~/.relayplane/config.json</div></div>
+<div class="header"><div><h1>⚡ RelayPlane Config</h1></div><div class="meta"><a href="/dashboard">← Dashboard</a> · read-only view of ~/.kv-local-proxy/config.json</div></div>
 <div id="content"><p style="color:#64748b">Loading config...</p></div>
 <script>
 async function load(){

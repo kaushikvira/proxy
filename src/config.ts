@@ -199,18 +199,18 @@ const CONFIG_VERSION = 1;
 
 /**
  * Resolve the base RelayPlane config directory.
- * Supports RELAYPLANE_HOME_OVERRIDE env var for dev/test isolation
- * (e.g. RELAYPLANE_HOME_OVERRIDE=/root → uses /root/.relayplane/).
- * Also supports RELAYPLANE_CONFIG_PATH for a fully custom config file path.
+ * Supports LLM_PROXY_HOME env var for dev/test isolation
+ * (e.g. LLM_PROXY_HOME=/root → uses /root/.relayplane/).
+ * Also supports LLM_PROXY_CONFIG_PATH for a fully custom config file path.
  */
 function resolveConfigDir(): string {
-  const homeOverride = process.env['RELAYPLANE_HOME_OVERRIDE'];
+  const homeOverride = process.env['LLM_PROXY_HOME'];
   const base = homeOverride ?? os.homedir();
-  return path.join(base, '.relayplane');
+  return path.join(base, '.kv-local-proxy');
 }
 
 function resolveConfigFilePath(): string {
-  const customPath = process.env['RELAYPLANE_CONFIG_PATH'];
+  const customPath = process.env['LLM_PROXY_CONFIG_PATH'];
   if (customPath && customPath.trim()) return customPath;
   return path.join(resolveConfigDir(), 'config.json');
 }

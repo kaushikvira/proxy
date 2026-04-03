@@ -1,8 +1,8 @@
 /**
  * Osmosis Phase 1 — KnowledgeAtom capture
  *
- * Stores per-request atoms in ~/.relayplane/osmosis.db (SQLite via better-sqlite3).
- * Falls back to ~/.relayplane/osmosis.jsonl if SQLite is unavailable.
+ * Stores per-request atoms in ~/.kv-local-proxy/osmosis.db (SQLite via better-sqlite3).
+ * Falls back to ~/.kv-local-proxy/osmosis.jsonl if SQLite is unavailable.
  *
  * All writes are fire-and-forget; errors are silently swallowed.
  */
@@ -98,10 +98,10 @@ let _jsonlPath: string | null = null;
 let _insertStmt: import('better-sqlite3').Statement | null = null;
 
 export function getRelayplaneDir(): string {
-  // RELAYPLANE_HOME_OVERRIDE is used in tests to avoid writing to ~/.relayplane
-  const override = process.env['RELAYPLANE_HOME_OVERRIDE'];
+  // LLM_PROXY_HOME is used in tests to avoid writing to ~/.kv-local-proxy
+  const override = process.env['LLM_PROXY_HOME'];
   const base = override ?? os.homedir();
-  return path.join(base, '.relayplane');
+  return path.join(base, '.kv-local-proxy');
 }
 
 function ensureDir(dir: string): void {

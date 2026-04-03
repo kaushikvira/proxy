@@ -24,7 +24,7 @@ export const DEFAULT_MESH_CONFIG: MeshConfig = {
   meshUrl: 'https://osmosis-mesh-dev.fly.dev',
   syncIntervalMs: 300_000,
   injectIntervalMs: 900_000,
-  dataDir: `${process.env.HOME ?? '/root'}/.relayplane/mesh`,
+  dataDir: `${process.env.HOME ?? '/root'}/.kv-local-proxy/mesh`,
 };
 
 export interface ResponseCacheConfig {

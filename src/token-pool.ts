@@ -4,7 +4,7 @@
  * Supports two registration paths:
  *  1. Auto-detected  — tokens seen in incoming Authorization headers are
  *     registered automatically with lower priority (priority = 10).
- *  2. Explicit config — accounts listed in ~/.relayplane/config.json under
+ *  2. Explicit config — accounts listed in ~/.kv-local-proxy/config.json under
  *     providers.anthropic.accounts[] are registered with the user-specified
  *     priority (default 0 = highest).
  *

@@ -116,7 +116,7 @@ export function inferProvider(model: string): string {
 // Pro tier check
 // ---------------------------------------------------------------------------
 
-const CONFIG_DIR = path.join(os.homedir(), '.relayplane');
+const CONFIG_DIR = path.join(os.homedir(), '.kv-local-proxy');
 const CREDENTIALS_PATH = path.join(CONFIG_DIR, 'credentials.json');
 
 interface Credentials {
@@ -129,13 +129,13 @@ const PRO_PLANS = new Set(['pro', 'max', 'enterprise']);
 
 /**
  * Returns true if the current local credentials indicate a Pro (or higher) plan.
- * Also respects the RELAYPLANE_PRO_ESTIMATE env variable for testing / CI overrides.
+ * Also respects the LLM_PROXY_PRO_ESTIMATE env variable for testing / CI overrides.
  * The env override is intentionally disabled in production to prevent bypassing the gate.
  */
 export function isProTier(): boolean {
   // Allow env-based override in non-production environments only (tests, CI, dev)
   if (process.env.NODE_ENV !== 'production') {
-    const envOverride = process.env.RELAYPLANE_PRO_ESTIMATE;
+    const envOverride = process.env.LLM_PROXY_PRO_ESTIMATE;
     if (envOverride === 'true' || envOverride === '1') return true;
     if (envOverride === 'false' || envOverride === '0') return false;
   }

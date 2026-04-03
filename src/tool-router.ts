@@ -95,7 +95,7 @@ export interface ToolRouterConfig {
 
 export const DEFAULT_TOOL_ROUTER_CONFIG: ToolRouterConfig = {
   enabled: false,
-  packsDir: path.join(os.homedir(), '.relayplane', 'config', 'tool-packs'),
+  packsDir: path.join(os.homedir(), '.kv-local-proxy', 'config', 'tool-packs'),
 };
 
 // ── Built-in Packs ────────────────────────────────────────────────────────────

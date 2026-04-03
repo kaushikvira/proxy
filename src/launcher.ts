@@ -10,8 +10,8 @@
 import * as http from 'node:http';
 import { handleHealthRequest } from './health.js';
 
-const port = parseInt(process.env['RELAYPLANE_PROXY_PORT'] ?? '4100', 10);
-const host = process.env['RELAYPLANE_PROXY_HOST'] ?? '127.0.0.1';
+const port = parseInt(process.env['LLM_PROXY_PORT'] ?? '4100', 10);
+const host = process.env['LLM_PROXY_HOST'] ?? '127.0.0.1';
 
 const server = http.createServer((req, res) => {
   const pathname = (req.url ?? '').split('?')[0] ?? '';

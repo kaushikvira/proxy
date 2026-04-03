@@ -2,7 +2,7 @@
  * Per-Agent Cost Tracking
  *
  * Fingerprints agents by hashing the first 500 chars of their system prompt
- * (SHA-256, first 12 hex chars). Maintains an agent registry at ~/.relayplane/agents.json.
+ * (SHA-256, first 12 hex chars). Maintains an agent registry at ~/.kv-local-proxy/agents.json.
  *
  * @packageDocumentation
  */
@@ -26,7 +26,7 @@ export interface AgentRegistry {
   [fingerprint: string]: AgentRegistryEntry;
 }
 
-const REGISTRY_DIR = path.join(os.homedir(), '.relayplane');
+const REGISTRY_DIR = path.join(os.homedir(), '.kv-local-proxy');
 const REGISTRY_FILE = path.join(REGISTRY_DIR, 'agents.json');
 
 let agentRegistry: AgentRegistry = {};

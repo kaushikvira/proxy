@@ -6,7 +6,7 @@
  * configured provider, mapping the model name to the equivalent on that
  * provider.
  *
- * Config example (~/.relayplane/config.json):
+ * Config example (~/.kv-local-proxy/config.json):
  * ```json
  * {
  *   "crossProviderCascade": {

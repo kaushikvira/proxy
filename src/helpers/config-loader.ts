@@ -18,7 +18,7 @@ export interface RelayPlaneProxyConfigFile {
 }
 
 export function getProxyConfig(): RelayPlaneProxyConfigFile {
-  const configPath = path.join(os.homedir(), '.relayplane', 'config.json');
+  const configPath = path.join(os.homedir(), '.kv-local-proxy', 'config.json');
   try {
     const raw = fs.readFileSync(configPath, 'utf8');
     return JSON.parse(raw);

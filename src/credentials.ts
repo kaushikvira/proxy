@@ -1,7 +1,7 @@
 /**
  * RelayPlane Agent Credentials
  *
- * Read/write ~/.relayplane/credentials.json for agent-native auth.
+ * Read/write ~/.kv-local-proxy/credentials.json for agent-native auth.
  * Shared by CLI and proxy for authenticated cloud/mesh API calls.
  *
  * credentials.json schema:
@@ -43,12 +43,12 @@ export interface AgentCredentials {
 
 /**
  * Resolve the credentials file path.
- * Respects RELAYPLANE_HOME_OVERRIDE for dev/test isolation.
+ * Respects LLM_PROXY_HOME for dev/test isolation.
  */
 export function getCredentialsFilePath(): string {
-  const homeOverride = process.env['RELAYPLANE_HOME_OVERRIDE'];
+  const homeOverride = process.env['LLM_PROXY_HOME'];
   const base = homeOverride ?? os.homedir();
-  return path.join(base, '.relayplane', 'credentials.json');
+  return path.join(base, '.kv-local-proxy', 'credentials.json');
 }
 
 /**

@@ -67,7 +67,7 @@ export function initMeshLayer(config: MeshConfig, apiKey?: string): MeshHandle {
 
   const dbDir = config.db_path
     ? config.db_path.substring(0, config.db_path.lastIndexOf('/'))
-    : join(process.env.HOME ?? '/root', '.relayplane');
+    : join(process.env.HOME ?? '/root', '.kv-local-proxy');
   const dbPath = config.db_path ?? join(dbDir, 'mesh.db');
 
   try {

@@ -21,7 +21,7 @@
 /**
  * Ollama provider configuration.
  *
- * Example in ~/.relayplane/config.json:
+ * Example in ~/.kv-local-proxy/config.json:
  * ```json
  * {
  *   "providers": {

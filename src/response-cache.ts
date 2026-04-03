@@ -5,7 +5,7 @@
  * SHA-256 hash of canonical request → cached response.
  *
  * Features:
- * - In-memory LRU + disk persistence (~/.relayplane/cache/)
+ * - In-memory LRU + disk persistence (~/.kv-local-proxy/cache/)
  * - SQLite index for metadata (hit counts, cost tracking, TTL)
  * - Gzipped response bodies on disk
  * - Configurable TTL with task-type overrides
@@ -33,7 +33,7 @@ export interface CacheConfig {
   ttlByTaskType?: Record<string, number>;
   /** Only cache when temperature=0 or unset (default: true) */
   onlyWhenDeterministic?: boolean;
-  /** Cache directory (default: ~/.relayplane/cache) */
+  /** Cache directory (default: ~/.kv-local-proxy/cache) */
   cacheDir?: string;
   /** Cache mode: "exact" (default) or "aggressive" */
   mode?: 'exact' | 'aggressive';
@@ -58,7 +58,7 @@ const DEFAULTS: ResolvedCacheConfig = {
   defaultTtlSeconds: 3600,
   ttlByTaskType: {},
   onlyWhenDeterministic: true,
-  cacheDir: path.join(os.homedir(), '.relayplane', 'cache'),
+  cacheDir: path.join(os.homedir(), '.kv-local-proxy', 'cache'),
   mode: 'exact',
   aggressiveMaxAge: 1800,
 };

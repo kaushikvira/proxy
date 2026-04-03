@@ -1,7 +1,7 @@
 /**
  * Session Intelligence — X-Claude-Code-Session-Id tracking
  *
- * Stores per-session aggregates in ~/.relayplane/sessions.db (SQLite via better-sqlite3).
+ * Stores per-session aggregates in ~/.kv-local-proxy/sessions.db (SQLite via better-sqlite3).
  * Falls back to an in-memory Map if SQLite is unavailable (e.g. no native bindings).
  *
  * Extracts the X-Claude-Code-Session-Id header from every request;
@@ -49,9 +49,9 @@ let _upsertStmt: import('better-sqlite3').Statement | null = null;
 const _memStore = new Map<string, SessionEntry>();
 
 function getRelayplaneDir(): string {
-  const override = process.env['RELAYPLANE_HOME_OVERRIDE'];
+  const override = process.env['LLM_PROXY_HOME'];
   const base = override ?? os.homedir();
-  return path.join(base, '.relayplane');
+  return path.join(base, '.kv-local-proxy');
 }
 
 function ensureDir(dir: string): void {

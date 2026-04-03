@@ -1,7 +1,7 @@
 /**
  * Rate Limiter - In-memory rate limiting for RelayPlane Proxy
  *
- * Limits are configurable via ~/.relayplane/config.json under `rateLimit.models`.
+ * Limits are configurable via ~/.kv-local-proxy/config.json under `rateLimit.models`.
  * When a limit is hit, requests are queued (up to maxQueueDepth) instead of
  * immediately returning 429. Queue overflow or timeout results in a 429.
  *
@@ -138,7 +138,7 @@ export class RateLimiter {
   }
 
   /**
-   * Apply configuration from ~/.relayplane/config.json rateLimit section.
+   * Apply configuration from ~/.kv-local-proxy/config.json rateLimit section.
    * Call once at proxy startup.
    */
   configure(cfg: RateLimitConfigSection): void {
@@ -156,7 +156,7 @@ export class RateLimiter {
   }
 
   /**
-   * Apply per-provider configuration from ~/.relayplane/config.json `providers` section.
+   * Apply per-provider configuration from ~/.kv-local-proxy/config.json `providers` section.
    * Call once at proxy startup, after configure().
    *
    * Each provider's rateLimit.rpm becomes the fallback for ALL models from that provider
@@ -436,7 +436,7 @@ export class RateLimiter {
 export const rateLimiter = new RateLimiter();
 
 /**
- * Load rateLimit + providers config from ~/.relayplane/config.json and apply to the singleton.
+ * Load rateLimit + providers config from ~/.kv-local-proxy/config.json and apply to the singleton.
  * Call once at proxy startup.
  */
 export function configureRateLimiter(): void {
