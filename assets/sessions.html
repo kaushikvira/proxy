@@ -268,21 +268,32 @@
     return d.innerHTML;
   }
 
-  // Strip system-reminder tags and Claude Code metadata from user messages
+  // Extract the meaningful human message, stripping all metadata
   function cleanUserMessage(msg) {
     if (!msg) return '';
-    // Remove <system-reminder>...</system-reminder> blocks
-    var s = msg.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '');
+    var s = msg;
+    // Remove <system-reminder>...</system-reminder> blocks (with content)
+    s = s.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/gi, '');
     // Remove <local-command-caveat>...</local-command-caveat>
     s = s.replace(/<local-command-caveat>[\s\S]*?<\/local-command-caveat>/gi, '');
-    // Remove <command-name>...</command-name> etc
-    s = s.replace(/<\/?[a-z-]+>/gi, '');
-    // Trim whitespace
-    s = s.replace(/^\s+/, '').replace(/\s+$/, '');
-    // If nothing left, show first meaningful part of original
+    // Remove <task-notification>...</task-notification>
+    s = s.replace(/<task-notification>[\s\S]*?<\/task-notification>/gi, '');
+    // Remove <command-name>...</command-name> <command-message>...</command-message> etc
+    s = s.replace(/<command-[^>]*>[\s\S]*?<\/command-[^>]*>/gi, '');
+    // Remove <local-command-stdout>...</local-command-stdout>
+    s = s.replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/gi, '');
+    // Remove any remaining XML-like tags
+    s = s.replace(/<\/?[a-z][\w-]*[^>]*>/gi, '');
+    // Remove "Here are the existing tasks:" block and task lists
+    s = s.replace(/Here are the existing tasks:[\s\S]*?(?=\n\n|\s*$)/gi, '');
+    // Remove "IMPORTANT:" directives
+    s = s.replace(/IMPORTANT:[\s\S]*?(?=\n\n|\s*$)/gi, '');
+    // Collapse multiple newlines and trim
+    s = s.replace(/\n{3,}/g, '\n\n').replace(/^\s+/, '').replace(/\s+$/, '');
+    // If nothing left, try to find something useful in the original
     if (!s && msg.length > 0) {
-      var match = msg.match(/\n\n(.+)/);
-      if (match) s = match[1].trim();
+      var lines = msg.split('\n').filter(function(l) { return l.trim() && !l.match(/^[#<\s]/); });
+      s = lines.length > 0 ? lines[0].trim() : '(system message)';
     }
     return s || '(system message)';
   }
