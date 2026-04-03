@@ -54,6 +54,13 @@ export interface SessionNode {
   totalCost: number;
   totalRequests: number;
   lastSeenAt: number;
+  // Session-level context (stored once, deduped from requests)
+  systemPrompt?: string;
+  toolDefinitions?: { name: string; description: string }[];
+  authType?: 'oauth' | 'api-key' | 'none';
+  authKeyPreview?: string;
+  thinkingConfig?: string;
+  maxTokens?: number;
 }
 
 const ACTIVE_TIMEOUT_MS = 60_000;
@@ -68,6 +75,30 @@ export class SessionTree {
       root = this.createNode(req.sessionId, req.agentFingerprint, null, 'Main Agent');
       this.sessions.set(req.sessionId, root);
       this.evictOldSessions();
+    }
+
+    // Dedup: store context at session level, strip from request
+    if (req.systemPrompt) {
+      root.systemPrompt = req.systemPrompt;
+      req.systemPrompt = undefined;
+    }
+    if (req.toolDefinitions && req.toolDefinitions.length > 0) {
+      root.toolDefinitions = req.toolDefinitions;
+      req.toolDefinitions = undefined;
+    }
+    if (req.authType) {
+      root.authType = req.authType;
+      root.authKeyPreview = req.authKeyPreview;
+      req.authType = undefined;
+      req.authKeyPreview = undefined;
+    }
+    if (req.thinkingConfig) {
+      root.thinkingConfig = req.thinkingConfig;
+      req.thinkingConfig = undefined;
+    }
+    if (req.maxTokens) {
+      root.maxTokens = req.maxTokens;
+      req.maxTokens = undefined;
     }
 
     if (req.parentTraceId) {

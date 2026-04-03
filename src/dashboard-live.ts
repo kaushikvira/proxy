@@ -368,9 +368,10 @@ export function getLiveSessionHTML(): string {
   }
 
   function renderContextPanel(sess) {
-    var firstReq = null;
-    if (sess.requests && sess.requests.length) firstReq = sess.requests[0];
-    if (!firstReq) return '';
+    // Context is now stored at session level (deduped from requests)
+    var ctx = sess;
+    var firstReq = (sess.requests && sess.requests.length) ? sess.requests[0] : null;
+    if (!ctx.systemPrompt && !ctx.toolDefinitions && !firstReq) return '';
 
     var html = '<div class="context-panel">';
     html += '<div class="context-header" onclick="toggleContext()">';
@@ -378,20 +379,20 @@ export function getLiveSessionHTML(): string {
     html += '</div>';
     html += '<div class="context-body' + (contextOpen ? ' open' : '') + '" id="context-body">';
 
-    // System prompt
-    if (firstReq.systemPrompt) {
+    // System prompt (from session node)
+    if (ctx.systemPrompt) {
       html += '<div class="context-section">';
-      html += '<div class="context-section-title">System Prompt (' + firstReq.systemPrompt.length + ' chars)</div>';
-      html += '<div class="context-pre">' + esc(firstReq.systemPrompt) + '</div>';
+      html += '<div class="context-section-title">System Prompt (' + ctx.systemPrompt.length + ' chars)</div>';
+      html += '<div class="context-pre">' + esc(ctx.systemPrompt) + '</div>';
       html += '</div>';
     }
 
-    // Model config
+    // Model config (from session or latest request)
     var configParts = [];
-    if (firstReq.model) configParts.push('Model: ' + firstReq.model);
-    if (firstReq.routedModel && firstReq.routedModel !== firstReq.model) configParts.push('Routed: ' + firstReq.routedModel);
-    if (firstReq.maxTokens) configParts.push('Max tokens: ' + firstReq.maxTokens);
-    if (firstReq.thinkingBudget) configParts.push('Thinking budget: ' + firstReq.thinkingBudget);
+    var model = firstReq ? (firstReq.model || firstReq.routedModel) : '';
+    if (model) configParts.push('Model: ' + model);
+    if (ctx.maxTokens) configParts.push('Max tokens: ' + ctx.maxTokens);
+    if (ctx.thinkingConfig) configParts.push('Thinking: ' + ctx.thinkingConfig);
     if (configParts.length) {
       html += '<div class="context-section">';
       html += '<div class="context-section-title">Model Config</div>';
@@ -399,13 +400,13 @@ export function getLiveSessionHTML(): string {
       html += '</div>';
     }
 
-    // Tools list
-    if (firstReq.toolDefinitions && firstReq.toolDefinitions.length) {
+    // Tools list (from session node)
+    if (ctx.toolDefinitions && ctx.toolDefinitions.length) {
       html += '<div class="context-section">';
-      html += '<div class="context-section-title">Tools (' + firstReq.toolDefinitions.length + ')</div>';
+      html += '<div class="context-section-title">Tools (' + ctx.toolDefinitions.length + ')</div>';
       html += '<div class="tool-def-list">';
-      for (var i = 0; i < firstReq.toolDefinitions.length; i++) {
-        var td = firstReq.toolDefinitions[i];
+      for (var i = 0; i < ctx.toolDefinitions.length; i++) {
+        var td = ctx.toolDefinitions[i];
         html += '<div class="tool-def-item"><span class="tool-def-name">' + esc(td.name || '') + '</span>';
         if (td.description) html += '<span class="tool-def-desc">' + esc(truncate(td.description, 80)) + '</span>';
         html += '</div>';
@@ -413,13 +414,13 @@ export function getLiveSessionHTML(): string {
       html += '</div></div>';
     }
 
-    // Auth type
-    if (firstReq.authType || firstReq.authKeyPreview) {
-      var fullKey = firstReq.authKeyPreview || '';
+    // Auth (from session node)
+    if (ctx.authType || ctx.authKeyPreview) {
+      var fullKey = ctx.authKeyPreview || '';
       var maskedKey = fullKey.length > 16 ? fullKey.slice(0, 12) + '****...' + fullKey.slice(-4) : '****';
       html += '<div class="context-section">';
       html += '<div class="context-section-title">Authentication</div>';
-      html += '<span style="color:#8b949e;font-size:12px">' + esc(firstReq.authType || 'API Key') + ' </span>';
+      html += '<span style="color:#8b949e;font-size:12px">' + esc(ctx.authType || 'API Key') + ' </span>';
       html += '<span id="auth-masked" style="font-family:monospace;font-size:12px;color:#c9d1d9">' + esc(maskedKey) + '</span> ';
       html += '<span class="auth-reveal" onclick="revealAuth(this)" data-key="' + esc(fullKey) + '">show</span> ';
       html += '<span class="auth-reveal" onclick="copyAuth(this)" data-key="' + esc(fullKey) + '">copy</span>';

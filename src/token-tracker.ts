@@ -3,8 +3,12 @@
  *
  * Monitors OAuth/API key rotation. Tracks the current token,
  * records when it changes, and measures time between rotations.
- * All in-memory — nothing written to disk.
+ * Rotation history is persisted to ~/.kv-local-proxy/token-rotations.json.
  */
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as os from 'node:os';
 
 interface TokenRotation {
   token: string;
@@ -30,9 +34,49 @@ interface TokenStats {
   averageRotation: string | null; // human-readable
 }
 
+function getRotationFilePath(): string {
+  const base = process.env['LLM_PROXY_HOME'] ?? os.homedir();
+  return path.join(base, '.kv-local-proxy', 'token-rotations.json');
+}
+
 class TokenTracker {
   private current: TokenRotation | null = null;
-  private history: TokenRotation[] = [];   // completed rotations
+  private history: TokenRotation[] = [];
+
+  constructor() {
+    this.loadFromDisk();
+  }
+
+  private loadFromDisk(): void {
+    try {
+      const filePath = getRotationFilePath();
+      if (fs.existsSync(filePath)) {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        if (Array.isArray(data.history)) {
+          this.history = data.history;
+          console.log(`[TOKEN] Loaded ${this.history.length} rotation(s) from disk`);
+        }
+      }
+    } catch {
+      // Start fresh
+    }
+  }
+
+  private saveToDisk(): void {
+    try {
+      const filePath = getRotationFilePath();
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      // Save masked tokens only — never persist full keys
+      const safeHistory = this.history.map(h => ({
+        ...h,
+        token: mask(h.token),
+      }));
+      fs.writeFileSync(filePath, JSON.stringify({ history: safeHistory }, null, 2), { mode: 0o600 });
+    } catch {
+      // Best effort
+    }
+  }
 
   /** Call on every proxied request with the auth token */
   observe(token: string): void {
@@ -76,6 +120,7 @@ class TokenTracker {
 
     this.history.push({ ...this.current });
     this.current = { token, firstSeen: now, lastSeen: now, requestCount: 1 };
+    this.saveToDisk();
   }
 
   getStats(): TokenStats {
