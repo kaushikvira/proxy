@@ -79,28 +79,33 @@
 
   /* Request card */
   .request-card {
-    border: 1px solid #21262d; border-radius: 6px; margin-bottom: 12px;
+    border: 1px solid #21262d; border-radius: 8px; margin-bottom: 14px;
     background: #161b22; overflow: hidden;
-    border-top: 1px solid #30363d;
   }
   .request-header {
-    display: flex; align-items: baseline; gap: 8px; padding: 12px 16px;
-    font-size: 13px; cursor: pointer; flex-wrap: wrap;
+    padding: 14px 16px; cursor: pointer;
   }
   .request-header:hover { background: #1c2128; }
-  .req-time { color: #8b949e; font-size: 12px; flex-shrink: 0; }
+  .req-meta {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;
+  }
+  .req-expand-arrow { color: #484f58; font-size: 10px; flex-shrink: 0; width: 12px; }
+  .req-time { color: #6e7681; font-size: 11px; flex-shrink: 0; }
   .req-model {
-    background: #1f6feb33; color: #58a6ff; padding: 2px 8px; border-radius: 4px;
+    background: #1f6feb22; color: #58a6ff; padding: 2px 8px; border-radius: 4px;
     font-size: 11px; font-weight: 600; flex-shrink: 0;
   }
-  .req-message { color: #f0f6fc; flex: 1; font-size: 14px; font-weight: 500; line-height: 1.4; }
-  .req-message .md { display: inline; }
-  .req-message .md p { display: inline; margin: 0; }
+  .req-cost-bar-inline { display: inline-flex; height: 6px; width: 80px; border-radius: 3px; overflow: hidden; background: #21262d; flex-shrink: 0; vertical-align: middle; }
+  .req-cost { color: #3fb950; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .req-tokens { color: #6e7681; font-size: 11px; flex-shrink: 0; }
+  .req-error { color: #f85149; font-weight: 600; }
+  .req-message {
+    color: #f0f6fc; font-size: 14px; font-weight: 500; line-height: 1.5;
+    padding: 0 0 0 20px;
+  }
+  .req-message .md { margin: 0; }
+  .req-message .md p { margin: 2px 0; }
   .req-message .md code { font-size: 12px; }
-  .req-cost-bar-inline { display: inline-flex; height: 6px; width: 60px; border-radius: 3px; overflow: hidden; background: #21262d; flex-shrink: 0; vertical-align: middle; }
-  .req-cost { color: #8b949e; font-size: 12px; flex-shrink: 0; }
-  .req-tokens { color: #8b949e; font-size: 11px; flex-shrink: 0; }
-  .req-error { color: #f85149; }
 
   /* Thinking block */
   .thinking-block {
@@ -120,13 +125,13 @@
 
   /* Response block */
   .response-block {
-    margin: 8px 14px; padding: 10px 14px; border-radius: 6px;
+    margin: 8px 14px; padding: 14px 16px; border-radius: 6px;
     background: #0d1117; border: 1px solid #21262d;
     overflow-y: auto;
   }
   .response-text {
-    font-size: 13px; white-space: pre-wrap; word-break: break-word;
-    font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word;
+    color: #e6edf3;
   }
 
   /* Tool call */
@@ -174,10 +179,10 @@
 
   /* --- New QoL styles --- */
   .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600; margin-left: 4px; color: #0d1117; }
-  .tool-call-rich { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #161b22; font-size: 12px; line-height: 1.6; }
-  .tool-icon { flex-shrink: 0; }
-  .tool-display-name { color: #ffa657; font-weight: 600; min-width: 50px; }
-  .tool-summary { color: #8b949e; word-break: break-all; }
+  .tool-call-rich { display: flex; align-items: baseline; gap: 8px; padding: 8px 12px; margin: 4px 14px; border-radius: 6px; background: #0d1117; border: 1px solid #21262d; font-size: 13px; line-height: 1.5; }
+  .tool-icon { flex-shrink: 0; font-size: 14px; }
+  .tool-display-name { color: #ffa657; font-weight: 600; min-width: 50px; flex-shrink: 0; }
+  .tool-summary { color: #c9d1d9; word-break: break-word; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; }
   .bash-viewer { background: #1a1e24; border: 1px solid #30363d; border-radius: 4px; padding: 6px 10px; margin: 4px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; color: #e6edf3; }
   .session-summary-bar { display: flex; gap: 16px; padding: 8px 16px; background: #161b22; border-bottom: 1px solid #21262d; font-size: 12px; color: #8b949e; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
   .session-summary-bar span { white-space: nowrap; }
@@ -744,23 +749,28 @@
     var arrow = expanded ? '\u25bc' : '\u25b6';
     var html = '<div class="request-card" id="card-' + esc(id) + '">';
     html += '<div class="request-header" onclick="toggleExpand(this)">';
-    html += '<span style="color:#484f58;font-size:10px;flex-shrink:0;width:12px">' + arrow + '</span>';
+
+    // Row 1: metadata — time, model, badges, cost bar, cost, tokens
+    html += '<div class="req-meta">';
+    html += '<span class="req-expand-arrow">' + arrow + '</span>';
     html += '<span class="req-time">' + esc(formatTime(req.timestamp)) + '</span>';
     html += '<span class="req-model">' + esc(req.model || req.routedModel || '?') + '</span>';
-
-    // Badges
     var badges = getRequestBadges(req);
     for (var b = 0; b < badges.length; b++) {
       html += '<span class="badge" style="background:' + badges[b].color + '">' + esc(badges[b].label) + '</span>';
     }
-
-    html += '<span class="req-message">' + renderMarkdown(cleanUserMessage(req.userMessage)) + '</span>';
-    // Inline cost bar between message and cost
     html += renderInlineCostBar(req);
     if (req.costUsd) html += '<span class="req-cost">' + esc(formatCost(req.costUsd)) + '</span>';
     var tokStr = formatTokens(req.tokensIn, req.tokensOut, req.thinkingTokens);
     if (tokStr) html += '<span class="req-tokens">' + esc(tokStr) + '</span>';
-    if (req.error) html += '<span class="req-error"> ERR</span>';
+    if (req.error) html += '<span class="req-error">ERR</span>';
+    html += '</div>';
+
+    // Row 2: user message — prominent, full width, markdown rendered
+    var cleanMsg = cleanUserMessage(req.userMessage);
+    if (cleanMsg && cleanMsg !== '(system message)') {
+      html += '<div class="req-message">' + renderMarkdown(cleanMsg) + '</div>';
+    }
     html += '</div>';
 
     // Thinking block
