@@ -197,6 +197,27 @@
   .tool-def-item { padding: 2px 0; border-bottom: 1px solid #21262d; }
   .tool-def-name { color: #ffa657; font-weight: 600; }
   .tool-def-desc { color: #6e7681; margin-left: 8px; }
+
+  /* Markdown rendering */
+  .md code { background: #1c2128; color: #f0883e; padding: 1px 5px; border-radius: 3px; font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em; }
+  .md pre { background: #0d1117; border: 1px solid #21262d; border-radius: 6px; padding: 12px; margin: 8px 0; overflow-x: auto; }
+  .md pre code { background: none; color: #c9d1d9; padding: 0; font-size: 12px; }
+  .md strong { color: #f0f6fc; font-weight: 600; }
+  .md em { color: #d2a8ff; font-style: italic; }
+  .md a { color: #58a6ff; text-decoration: underline; }
+  .md .filepath { color: #7ee787; }
+  .md ul, .md ol { margin: 4px 0 4px 20px; }
+  .md li { margin: 2px 0; }
+  .md p { margin: 4px 0; }
+  .md h1, .md h2, .md h3 { color: #f0f6fc; margin: 8px 0 4px 0; }
+  .md h1 { font-size: 1.2em; }
+  .md h2 { font-size: 1.1em; }
+  .md h3 { font-size: 1em; }
+  .md blockquote { border-left: 3px solid #30363d; padding-left: 12px; color: #8b949e; margin: 4px 0; }
+  .md hr { border: none; border-top: 1px solid #21262d; margin: 8px 0; }
+  .md table { border-collapse: collapse; margin: 4px 0; font-size: 12px; }
+  .md th, .md td { border: 1px solid #30363d; padding: 4px 8px; }
+  .md th { background: #161b22; color: #f0f6fc; }
 </style>
 </head>
 <body>
@@ -233,6 +254,74 @@
     var d = document.createElement('div');
     d.textContent = s;
     return d.innerHTML;
+  }
+
+  // Lightweight markdown renderer — XSS-safe (esc first, then format)
+  function renderMarkdown(raw) {
+    if (!raw) return '';
+    var s = esc(raw);
+
+    // Code blocks (``` ... ```) — must be before inline code
+    s = s.replace(/```(\w*)\n?([\s\S]*?)```/g, function(m, lang, code) {
+      return '<pre><code>' + code.trim() + '</code></pre>';
+    });
+
+    // Inline code (`...`)
+    s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+
+    // Bold (**...**)
+    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+    // Italic (*...*)
+    s = s.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
+
+    // Headers (# ## ###)
+    s = s.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+    s = s.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+    s = s.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+
+    // Blockquotes (> ...)
+    s = s.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+
+    // Horizontal rules (---)
+    s = s.replace(/^---$/gm, '<hr>');
+
+    // Unordered lists (- item)
+    s = s.replace(/^- (.+)$/gm, '<li>$1</li>');
+    s = s.replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>');
+    // Clean up consecutive </ul><ul>
+    s = s.replace(/<\/ul>\s*<ul>/g, '');
+
+    // Ordered lists (1. item)
+    s = s.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+
+    // URLs
+    s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+    s = s.replace(/(https?:\/\/[^\s<]+)/g, function(url) {
+      if (url.indexOf('href="') > -1) return url; // already linked
+      return '<a href="' + url + '" target="_blank">' + url + '</a>';
+    });
+
+    // File paths — highlight /path/to/file.ext patterns
+    s = s.replace(/(?<!["\w])(\/?(?:[\w.-]+\/)+[\w.-]+\.\w+)/g, '<span class="filepath">$1</span>');
+
+    // Tables (| header | header |)
+    s = s.replace(/^(\|.+\|)\n(\|[-| :]+\|)\n((?:\|.+\|\n?)+)/gm, function(m, header, sep, body) {
+      var ths = header.split('|').filter(function(c) { return c.trim(); }).map(function(c) { return '<th>' + c.trim() + '</th>'; }).join('');
+      var rows = body.trim().split('\n').map(function(row) {
+        var tds = row.split('|').filter(function(c) { return c.trim(); }).map(function(c) { return '<td>' + c.trim() + '</td>'; }).join('');
+        return '<tr>' + tds + '</tr>';
+      }).join('');
+      return '<table><thead><tr>' + ths + '</tr></thead><tbody>' + rows + '</tbody></table>';
+    });
+
+    // Paragraphs — wrap standalone lines
+    s = s.replace(/\n\n/g, '</p><p>');
+    if (s.indexOf('<p>') === -1 && s.indexOf('<h') === -1 && s.indexOf('<pre>') === -1 && s.indexOf('<ul>') === -1 && s.indexOf('<table>') === -1) {
+      s = '<p>' + s + '</p>';
+    }
+
+    return '<div class="md">' + s + '</div>';
   }
 
   function truncate(s, n) {
@@ -596,7 +685,7 @@
     html += '</div>';
     html += '<div class="thinking-block" id="thinking-full-' + esc(id) + '" style="display:' + (thinkingExpanded ? 'block' : 'none') + '">';
     html += '<div class="thinking-label">Thinking</div>';
-    html += '<div class="thinking-text">' + esc(thinkingText) + '</div>';
+    html += '<div class="thinking-text">' + renderMarkdown(thinkingText) + '</div>';
     html += '</div>';
     return html;
   }
@@ -631,7 +720,7 @@
     // Expandable: response + tools
     html += '<div class="expandable' + (expanded ? ' open' : '') + '" id="expand-' + esc(id) + '">';
     if (req.responseText) {
-      html += '<div class="response-block"><div class="response-text" id="response-text-' + esc(id) + '">' + esc(req.responseText) + '</div></div>';
+      html += '<div class="response-block"><div class="response-text" id="response-text-' + esc(id) + '">' + renderMarkdown(req.responseText) + '</div></div>';
     }
     if (req.toolCalls && req.toolCalls.length) {
       for (var t = 0; t < req.toolCalls.length; t++) {
