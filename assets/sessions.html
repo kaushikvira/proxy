@@ -1070,49 +1070,14 @@
     });
 
     evtSource.addEventListener('request.captured', function(e) {
+      // Don't push request into state here — session.updated (which fires right after)
+      // will replace the full session tree from the server, avoiding duplicates.
+      // Just track new activity count for the banner.
       var data = JSON.parse(e.data);
       var sid = data.sessionId;
-      if (!sessions[sid]) {
-        sessions[sid] = {
-          sessionId: sid, agentFingerprint: '', agentLabel: 'Main Agent',
-          parentTraceId: null, children: [], requests: [],
-          isActive: true, totalCost: 0, totalRequests: 0, lastSeenAt: Date.now()
-        };
-      }
-      var sess = sessions[sid];
-      if (data.parentTraceId) {
-        var child = null;
-        for (var i = 0; i < sess.children.length; i++) {
-          if (sess.children[i].agentFingerprint === data.agentFingerprint) {
-            child = sess.children[i]; break;
-          }
-        }
-        if (!child) {
-          child = {
-            sessionId: sid, agentFingerprint: data.agentFingerprint || '',
-            agentLabel: 'Subagent ' + (sess.children.length + 1),
-            parentTraceId: data.parentTraceId, children: [], requests: [],
-            isActive: true, totalCost: 0, totalRequests: 0, lastSeenAt: Date.now()
-          };
-          sess.children.push(child);
-        }
-        child.requests.push(data);
-        child.totalCost += (data.costUsd || 0);
-        child.totalRequests++;
-        child.lastSeenAt = Date.now();
-      } else {
-        sess.requests.push(data);
-      }
-      sess.totalCost += (data.costUsd || 0);
-      sess.totalRequests++;
-      sess.lastSeenAt = Date.now();
-      sess.isActive = true;
-
       if (!activeSessionId) activeSessionId = sid;
       if (userScrolledUp && sid === activeSessionId) newRequestCount++;
       if (!userScrolledUp) newRequestCount = 0;
-      renderTabs();
-      renderContent();
     });
 
     evtSource.addEventListener('session.updated', function(e) {
