@@ -774,13 +774,17 @@
       if (now - reqTime < 60000) recentCost += r.costUsd || 0;
     }
 
-    // Context gauge (latest request tokensIn = total context sent)
-    var contextTokens = lastReq.tokensIn || 0;
+    // Context gauge: real context = input_tokens + cache_read + cache_create
+    // (Anthropic reports input_tokens as non-cached portion only)
+    var lastCacheRead = lastReq.cacheReadTokens || 0;
+    var lastCacheCreate = lastReq.cacheCreationTokens || 0;
+    var contextTokens = (lastReq.tokensIn || 0) + lastCacheRead + lastCacheCreate;
     var contextPct = Math.min(contextTokens / 1000000 * 100, 100);
     var contextColor = contextPct < 50 ? 'green' : contextPct < 80 ? 'yellow' : 'red';
 
-    // Cache rate
-    var cacheRate = totalIn > 0 ? (totalCacheRead / totalIn * 100) : 0;
+    // Cache rate: cache_read / total_context (per request average)
+    var totalContext = totalIn + totalCacheRead + totalCacheCreate;
+    var cacheRate = totalContext > 0 ? (totalCacheRead / totalContext * 100) : 0;
     var cacheSavings = totalCacheRead / 1000000 * 15 * 0.9;
 
     // Thinking
@@ -799,7 +803,7 @@
     html += '<div class="gauge">';
     html += '<div class="gauge-label">\ud83d\udcca Context Window</div>';
     html += '<div class="gauge-value">' + contextPct.toFixed(1) + '% of 1M</div>';
-    html += '<div class="gauge-detail">' + formatTokenCount(contextTokens) + ' input tokens (last req)</div>';
+    html += '<div class="gauge-detail">' + formatTokenCount(contextTokens) + ' total (' + formatTokenCount(lastCacheRead) + ' cached, ' + formatTokenCount((lastReq.tokensIn || 0) + lastCacheCreate) + ' new)</div>';
     html += '<div class="gauge-bar"><div class="gauge-bar-fill ' + contextColor + '" style="width:' + contextPct + '%"></div></div>';
     html += '</div>';
 
