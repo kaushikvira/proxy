@@ -177,10 +177,10 @@
   .bash-viewer { background: #1a1e24; border: 1px solid #30363d; border-radius: 4px; padding: 6px 10px; margin: 4px 0; font-family: 'SF Mono', Menlo, monospace; font-size: 12px; color: #e6edf3; }
   .session-summary-bar { display: flex; gap: 16px; padding: 8px 16px; background: #161b22; border-bottom: 1px solid #21262d; font-size: 12px; color: #8b949e; flex-wrap: wrap; position: sticky; top: 0; z-index: 5; }
   .session-summary-bar span { white-space: nowrap; }
-  .cost-bar { display: flex; height: 3px; border-radius: 2px; overflow: hidden; margin: 2px 0 6px 0; }
-  .cost-bar .seg-thinking { background: #a371f7; }
-  .cost-bar .seg-input { background: #58a6ff; }
-  .cost-bar .seg-output { background: #3fb950; }
+  .cost-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; margin: 4px 14px 8px 14px; background: #21262d; }
+  .cost-bar .seg-thinking { background: #d2a8ff; }
+  .cost-bar .seg-input { background: #79c0ff; }
+  .cost-bar .seg-output { background: #56d364; }
   .thinking-summary { font-size: 12px; color: #8b949e; font-style: italic; margin: 2px 0; cursor: pointer; }
   .thinking-summary:hover { color: #c9d1d9; }
   .context-panel { border: 1px solid #21262d; border-radius: 6px; margin: 8px 0; background: #161b22; }
@@ -654,11 +654,16 @@
     var pThink = (tthink / total * 100).toFixed(1);
     var pIn = (tin / total * 100).toFixed(1);
     var pOut = (tout / total * 100).toFixed(1);
-    return '<div class="cost-bar" style="margin:0 14px">'
+    var legend = '<div style="display:flex;gap:12px;font-size:10px;color:#8b949e;margin:0 14px 2px">';
+    if (tthink > 0) legend += '<span><span style="color:#d2a8ff">\u25cf</span> thinking ' + formatTokenCount(tthink) + '</span>';
+    legend += '<span><span style="color:#79c0ff">\u25cf</span> input ' + formatTokenCount(tin) + '</span>';
+    legend += '<span><span style="color:#56d364">\u25cf</span> output ' + formatTokenCount(tout) + '</span>';
+    legend += '</div>';
+    return '<div class="cost-bar">'
       + '<div class="seg-thinking" style="width:' + pThink + '%"></div>'
       + '<div class="seg-input" style="width:' + pIn + '%"></div>'
       + '<div class="seg-output" style="width:' + pOut + '%"></div>'
-      + '</div>';
+      + '</div>' + legend;
   }
 
   function renderToolCallRich(tc) {
