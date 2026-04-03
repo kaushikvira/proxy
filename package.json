@@ -1,17 +1,12 @@
 {
-  "name": "@relayplane/proxy",
-  "version": "1.9.1",
-  "description": "Open source cost intelligence proxy for AI agents. Cut LLM costs ~80% with smart model routing. Dashboard, policy engine, 11 providers. MIT licensed.",
-  "homepage": "https://relayplane.com",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/RelayPlane/proxy"
-  },
+  "name": "local-llm-proxy",
+  "version": "1.0.0",
+  "description": "Local LLM proxy with cost tracking, caching, and smart model routing. Supports 11 providers. No external telemetry.",
+  "private": true,
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "relayplane": "dist/cli.js",
-    "relayplane-proxy": "dist/cli.js"
+    "llm-proxy": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -25,43 +20,27 @@
     "test:e2e": "vitest run test/e2e/"
   },
   "keywords": [
-    "relayplane",
     "ai",
     "llm",
     "proxy",
     "routing",
     "anthropic",
     "openai",
-    "gemini",
-    "openclaw",
-    "observability",
-    "agent-ops"
+    "gemini"
   ],
-  "author": "RelayPlane",
   "license": "MIT",
   "dependencies": {
-    "@relayplane/core": "^0.1.4",
-    "fastest-levenshtein": "^1.0.16",
-    "@relayplane/learning-engine": "^0.1.0",
-    "better-sqlite3": "^11.10.0"
-  },
-  "optionalDependencies": {
-    "@relayplane/auth-gate": "^0.1.0",
-    "@relayplane/explainability": "^0.1.0",
-    "@relayplane/ledger": "^0.1.0",
-    "@relayplane/policy-engine": "^0.1.0",
-    "@relayplane/routing-engine": "^0.1.0",
-    "better-sqlite3": "^11.0.0"
+    "better-sqlite3": "^11.10.0",
+    "fastest-levenshtein": "^1.0.16"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.5.2",
     "typescript": "^5.3.3",
     "vitest": "^1.1.0"
   },
   "engines": {
     "node": ">=18"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "files": [
     "dist",

@@ -351,120 +351,12 @@ export class MeshRecoverySync {
     return this.meshStore;
   }
 
-  /**
-   * Push eligible local patterns to the mesh.
-   * Only shares patterns that meet minimum confidence and success count.
-   */
-  async pushPatterns(localStore: RecoveryPatternStore): Promise<{
-    pushed: number;
-    errors: string[];
-  }> {
-    const errors: string[] = [];
-    const eligible = localStore.getAll().filter(p =>
-      p.confidence >= this.config.minShareConfidence &&
-      p.successCount >= this.config.minShareSuccessCount
-    );
-
-    if (eligible.length === 0) {
-      return { pushed: 0, errors: [] };
-    }
-
-    // Convert to atoms and limit
-    const atoms = eligible
-      .slice(0, this.config.maxPushPerSync)
-      .map(p => patternToAtom(p, this.config.instanceHash));
-
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-
-      const res = await fetch(`${this.config.meshUrl}/mesh/recovery/contribute`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(atoms),
-      });
-
-      if (!res.ok) {
-        const errBody = await res.text();
-        errors.push(`Push failed: ${res.status} ${errBody}`);
-        return { pushed: 0, errors };
-      }
-
-      const body = await res.json() as { accepted: number; results: Array<{ id: string; status: string }> };
-
-      // Update local mesh store with push results
-      for (const atom of atoms) {
-        this.meshStore.upsert(atom);
-      }
-
-      return { pushed: body.accepted, errors: [] };
-    } catch (err: any) {
-      errors.push(`Push error: ${err.message}`);
-      return { pushed: 0, errors };
-    }
+  async pushPatterns(_localStore: RecoveryPatternStore): Promise<{ pushed: number; errors: string[] }> {
+    return { pushed: 0, errors: [] };
   }
 
-  /**
-   * Pull recovery patterns from the mesh and merge into local store.
-   * Applies conflict resolution when patterns overlap.
-   */
-  async pullPatterns(localStore: RecoveryPatternStore): Promise<{
-    pulled: number;
-    merged: number;
-    errors: string[];
-  }> {
-    const errors: string[] = [];
-
-    try {
-      const url = this.lastSyncTimestamp
-        ? `${this.config.meshUrl}/mesh/recovery/atoms?since=${encodeURIComponent(this.lastSyncTimestamp)}`
-        : `${this.config.meshUrl}/mesh/recovery/atoms`;
-
-      const headers: Record<string, string> = {};
-      if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-
-      const res = await fetch(url, { headers });
-
-      if (!res.ok) {
-        const errBody = await res.text();
-        errors.push(`Pull failed: ${res.status} ${errBody}`);
-        return { pulled: 0, merged: 0, errors };
-      }
-
-      const remoteAtoms = await res.json() as RecoveryAtom[];
-      let pulled = 0;
-      let merged = 0;
-
-      for (const remoteAtom of remoteAtoms) {
-        // Validate the atom has required fields
-        if (!remoteAtom.id || !remoteAtom.type || !remoteAtom.provider) continue;
-
-        // Update mesh store (handles merge)
-        const existing = this.meshStore.get(remoteAtom.id);
-        this.meshStore.upsert(remoteAtom);
-
-        if (existing) {
-          merged++;
-        } else {
-          pulled++;
-        }
-
-        // Apply to local pattern store if it meets our thresholds
-        if (
-          remoteAtom.reportCount >= this.config.minMeshReportCount &&
-          remoteAtom.confidence >= this.config.minMeshConfidence
-        ) {
-          const localPattern = atomToPattern(remoteAtom);
-          localStore.upsert(localPattern);
-        }
-      }
-
-      this.lastSyncTimestamp = new Date().toISOString();
-      return { pulled, merged, errors: [] };
-    } catch (err: any) {
-      errors.push(`Pull error: ${err.message}`);
-      return { pulled: 0, merged: 0, errors };
-    }
+  async pullPatterns(_localStore: RecoveryPatternStore): Promise<{ pulled: number; merged: number; errors: string[] }> {
+    return { pulled: 0, merged: 0, errors: [] };
   }
 
   /**
@@ -504,55 +396,12 @@ export class MeshRecoverySync {
     };
   }
 
-  /**
-   * Report a local confirmation of a mesh-sourced pattern.
-   * Called when a pattern pulled from mesh works locally.
-   */
   async reportConfirmation(patternId: string): Promise<void> {
     this.meshStore.recordConfirmation(patternId);
-
-    // Asynchronously report to mesh (best effort)
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-
-      await fetch(`${this.config.meshUrl}/mesh/recovery/confirm`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          patternId,
-          instanceHash: this.config.instanceHash,
-          success: true,
-        }),
-      });
-    } catch {
-      // Best effort — don't fail on confirmation report
-    }
   }
 
-  /**
-   * Report a local denial of a mesh-sourced pattern.
-   * Called when a pattern pulled from mesh fails locally.
-   */
   async reportDenial(patternId: string): Promise<void> {
     this.meshStore.recordDenial(patternId);
-
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (this.config.apiKey) headers['Authorization'] = `Bearer ${this.config.apiKey}`;
-
-      await fetch(`${this.config.meshUrl}/mesh/recovery/confirm`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          patternId,
-          instanceHash: this.config.instanceHash,
-          success: false,
-        }),
-      });
-    } catch {
-      // Best effort
-    }
   }
 
   /** Get sync status for dashboard */

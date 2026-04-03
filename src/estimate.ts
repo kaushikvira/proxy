@@ -197,7 +197,7 @@ export function handleEstimateRequest(
       body: {
         error: 'upgrade_required',
         message: 'Upgrade to Pro for pre-flight cost estimation',
-        url: 'https://relayplane.com/pricing',
+        url: '',
       },
     };
   }

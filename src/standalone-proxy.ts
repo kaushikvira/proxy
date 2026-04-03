@@ -23,10 +23,10 @@ import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { RelayPlane, inferTaskType, getInferenceConfidence } from '@relayplane/core';
+import { RelayPlane, inferTaskType, getInferenceConfidence } from './relay-core-stub.js';
 
 // __dirname is available natively in CJS
-import type { Provider as CoreProvider, TaskType } from '@relayplane/core';
+import type { Provider as CoreProvider, TaskType } from './relay-core-stub.js';
 
 type Provider = CoreProvider
   | 'openrouter'
@@ -38,9 +38,8 @@ type Provider = CoreProvider
   | 'perplexity'
   | 'ollama';
 import { buildModelNotFoundError } from './utils/model-suggestions.js';
-import { recordTelemetry as recordCloudTelemetry, inferTaskType as inferTelemetryTaskType, estimateCost, queueForUpload } from './telemetry.js';
-import { maybeFireActivated, maybeSendSessionHeartbeat } from './lifecycle-telemetry.js';
-import { loadConfig as loadUserConfig, hasValidCredentials, getMeshConfig, getDeviceId, isTelemetryEnabled } from './config.js';
+import { recordTelemetry as recordCloudTelemetry, inferTaskType as inferTelemetryTaskType, estimateCost } from './telemetry.js';
+import { loadConfig as loadUserConfig, hasValidCredentials, getMeshConfig } from './config.js';
 import { initMeshLayer, type MeshHandle } from './mesh/index.js';
 import { getResponseCache, computeCacheKey, computeAggressiveCacheKey, isDeterministic, responseHasToolCalls, type CacheConfig } from './response-cache.js';
 import { StatsCollector } from './stats.js';
@@ -95,38 +94,6 @@ const PROXY_VERSION: string = (() => {
   }
 })();
 
-let latestProxyVersionCache: { value: string | null; checkedAt: number } = { value: null, checkedAt: 0 };
-const LATEST_PROXY_VERSION_TTL_MS = 30 * 60 * 1000;
-
-async function getLatestProxyVersion(): Promise<string | null> {
-  const now = Date.now();
-  if (now - latestProxyVersionCache.checkedAt < LATEST_PROXY_VERSION_TTL_MS) {
-    return latestProxyVersionCache.value;
-  }
-
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2500);
-    const res = await fetch('https://registry.npmjs.org/@relayplane/proxy/latest', {
-      signal: controller.signal,
-      headers: { Accept: 'application/json' },
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) {
-      latestProxyVersionCache = { value: null, checkedAt: now };
-      return null;
-    }
-
-    const data = await res.json() as { version?: string };
-    const latest = data.version ?? null;
-    latestProxyVersionCache = { value: latest, checkedAt: now };
-    return latest;
-  } catch {
-    latestProxyVersionCache = { value: null, checkedAt: now };
-    return null;
-  }
-}
 
 /** Shared stats collector instance for the proxy server */
 export const proxyStatsCollector = new StatsCollector();
@@ -400,16 +367,6 @@ function sendCloudTelemetry(
     };
     // Record locally (writes to telemetry.jsonl + queues upload if telemetry_enabled)
     recordCloudTelemetry(event);
-    // Ensure cloud upload even if local telemetry_enabled is false
-    // recordCloudTelemetry skips queueForUpload when telemetry is disabled,
-    // but cloud dashboard needs these events regardless of local config
-    if (!isTelemetryEnabled()) {
-      queueForUpload({
-        ...event,
-        device_id: getDeviceId(),
-        timestamp: new Date().toISOString(),
-      });
-    }
     // Check whether we should show the signup nudge.
     // Called *after* the event is written so the count includes this request.
     // Uses setImmediate to guarantee zero added latency on the response path —
@@ -417,10 +374,6 @@ function sendCloudTelemetry(
     setImmediate(() => checkAndShowNudge());
     // Star nudge fires at 50 requests (separate from signup nudge at 100)
     setImmediate(() => checkAndShowStarNudge());
-    // Lifecycle event: fire proxy.activated once on first successful request
-    if (success) {
-      setImmediate(() => maybeFireActivated());
-    }
   } catch {
     // Telemetry should never break the proxy
   }
@@ -3130,7 +3083,7 @@ async function cascadeRequest(
 }
 
 function getDashboardHTML(): string {
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>RelayPlane Dashboard</title>
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kaushik's Dashboard</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}body{background:#0a0b0d;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;padding:20px;max-width:1600px;margin:0 auto}
 a{color:#34d399}h1{font-size:1.5rem;font-weight:600}
@@ -3163,7 +3116,7 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
 .prov{display:flex;gap:16px;flex-wrap:wrap}.prov-item{display:flex;align-items:center;font-size:.85rem;background:#111318;padding:8px 14px;border-radius:8px;border:1px solid #1e293b}
 .rename-btn{background:none;border:none;cursor:pointer;font-size:.75rem;opacity:.5;padding:2px}.rename-btn:hover{opacity:1}
 </style></head><body>
-<div class="header"><div><h1>⚡ RelayPlane Dashboard</h1></div><div class="meta"><a href="/dashboard/config">Config</a> · <span id="ver"></span><span id="vstat" class="vstat unavailable">Unable to check</span> · up <span id="uptime"></span> · refreshes every 5s</div></div>
+<div class="header"><div><h1>⚡ Kaushik's Dashboard</h1></div><div class="meta"><a href="/dashboard/config">Config</a> · <span id="ver"></span><span id="vstat" class="vstat unavailable">Unable to check</span> · up <span id="uptime"></span> · refreshes every 5s</div></div>
 <div class="cards">
   <div class="card"><div class="label">Requests (7d window, max 10k)</div><div class="value" id="totalReq">—</div><div id="totalReqDetail" style="font-size:.75rem;color:#64748b;margin-top:4px">—</div></div>
   <div class="card"><div class="label">Total Cost</div><div class="value" id="totalCost">—</div></div>
@@ -3558,9 +3511,6 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
   // Check once at startup whether the nudges have already been shown
   initNudge();
   initStarNudge();
-
-  // Lifecycle event: daily session heartbeat
-  setImmediate(() => maybeSendSessionHeartbeat());
 
   // Flush history on shutdown
   const handleShutdown = () => {
@@ -4009,8 +3959,7 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     }
 
     if (req.method === 'GET' && pathname === '/v1/version-status') {
-      const latest = await getLatestProxyVersion();
-      const status = getVersionStatus(PROXY_VERSION, latest);
+      const status = getVersionStatus(PROXY_VERSION, null);
       res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60' });
       res.end(JSON.stringify(status));
       return;

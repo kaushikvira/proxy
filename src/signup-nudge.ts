@@ -81,7 +81,7 @@ function markNudgeShown(): void {
  */
 function printNudge(count: number): void {
   process.stderr.write(
-    `\n💡 You've made ${count} requests through RelayPlane. Connect a free cloud account to sync savings history → relayplane.com/signup\n\n`
+    `\n💡 You've made ${count} requests through the proxy.\n\n`
   );
 }
 

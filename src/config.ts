@@ -254,10 +254,10 @@ function createDefaultConfig(): ProxyConfig {
     created_at: now,
     updated_at: now,
     mesh: {
-      enabled: true, // On by default as of v1.9. Disable: `relayplane mesh off`
-      endpoint: 'https://osmosis-mesh-dev.fly.dev',
+      enabled: false,
+      endpoint: '',
       sync_interval_ms: 60000,
-      contribute: true,
+      contribute: false,
     },
   };
 }
@@ -480,10 +480,10 @@ export function getCredentialsPath(): string {
 export function getMeshConfig(): MeshConfigSection {
   const config = loadConfig();
   return config.mesh ?? {
-    enabled: true,
-    endpoint: 'https://osmosis-mesh-dev.fly.dev',
+    enabled: false,
+    endpoint: '',
     sync_interval_ms: 60000,
-    contribute: true,
+    contribute: false,
   };
 }
 

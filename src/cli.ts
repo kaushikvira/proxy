@@ -37,7 +37,6 @@
  */
 
 import { startProxy } from './standalone-proxy.js';
-import { fireDashboardLinked } from './lifecycle-telemetry.js';
 import {
   loadConfig,
   isFirstRun,
@@ -51,7 +50,6 @@ import {
   updateMeshConfig,
 } from './config.js';
 import {
-  printTelemetryDisclosure,
   setAuditMode,
   setOfflineMode,
   getTelemetryStats,
@@ -76,37 +74,6 @@ try {
   // fallback
 }
 
-/**
- * Check npm registry for newer version (non-blocking, best-effort).
- * Returns update message string or null.
- */
-async function checkForUpdate(): Promise<string | null> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch('https://registry.npmjs.org/@relayplane/proxy/latest', {
-      signal: controller.signal,
-      headers: { 'Accept': 'application/json' },
-    });
-    clearTimeout(timeout);
-    if (!res.ok) return null;
-    const data = await res.json() as { version?: string };
-    const latest = data.version;
-    if (!latest || latest === VERSION) return null;
-    // Simple semver compare: split and compare numerically
-    const cur = VERSION.split('.').map(Number);
-    const lat = latest.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-      if ((lat[i] ?? 0) > (cur[i] ?? 0)) {
-        return `\n  ⬆️  Update available: v${VERSION} → v${latest}\n     Run: npm update -g @relayplane/proxy\n`;
-      }
-      if ((lat[i] ?? 0) < (cur[i] ?? 0)) return null;
-    }
-    return null;
-  } catch {
-    return null; // Network error, offline, etc. — silently skip
-  }
-}
 
 // ============================================
 // CREDENTIALS MANAGEMENT
@@ -146,236 +113,29 @@ function clearCredentials(): void {
   } catch {}
 }
 
-const API_URL = process.env.RELAYPLANE_API_URL || 'https://api.relayplane.com';
-
-// ============================================
-// LOGIN COMMAND (Device OAuth Flow)
-// ============================================
-
-async function handleLoginCommand(): Promise<void> {
-  const existing = loadCredentials();
-  if (existing?.apiKey) {
-    console.log('');
-    console.log('  ✅ Already logged in');
-    if (existing.email) console.log(`     Account: ${existing.email}`);
-    if (existing.plan) console.log(`     Plan: ${existing.plan}`);
-    console.log('');
-    console.log('  Run `relayplane logout` first to switch accounts.');
-    console.log('');
-    return;
-  }
-
-  console.log('');
-  console.log('  🔐 Logging in to RelayPlane...');
-  console.log('');
-
-  try {
-    // Start device auth flow
-    const startRes = await fetch(`${API_URL}/v1/cli/device/start`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ client: 'relayplane-proxy', version: VERSION }),
-    });
-
-    if (!startRes.ok) {
-      console.error('  ❌ Failed to start login flow. Is the API reachable?');
-      process.exit(1);
-    }
-
-    const { deviceCode, userCode, verificationUrl: rawVerificationUrl, pollIntervalSec, expiresIn } = await startRes.json() as any;
-
-    // Override old dashboard URL if the API returns it
-    const verificationUrl = rawVerificationUrl?.includes('app.relayplane.com')
-      ? rawVerificationUrl.replace('app.relayplane.com', 'relayplane.com')
-      : rawVerificationUrl;
-
-    console.log(`  Your one-time code:`);
-    console.log('');
-    console.log(`    📋 ${userCode}`);
-    console.log('');
-
-    // Try to auto-open the browser, fall back to "press Enter" prompt
-    let browserOpened = false;
-    const tryOpenBrowser = () => {
-      try {
-        const { execSync } = require('child_process');
-        const openCmd = process.platform === 'darwin' ? 'open' 
-          : process.platform === 'win32' ? 'start' 
-          : 'xdg-open';
-        execSync(`${openCmd} "${verificationUrl}" 2>/dev/null`, { stdio: 'ignore', timeout: 3000 });
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    // Check if we have a display / can open a browser
-    const hasDisplay = process.platform === 'darwin' || process.platform === 'win32' || !!process.env.DISPLAY || !!process.env.WAYLAND_DISPLAY;
-
-    if (hasDisplay) {
-      browserOpened = tryOpenBrowser();
-    }
-
-    if (browserOpened) {
-      console.log(`  ✅ Browser opened to: ${verificationUrl}`);
-      console.log(`     Paste the code above and approve.`);
-    } else if (process.stdin.isTTY) {
-      // Interactive terminal — let user press Enter to try opening, or copy manually
-      console.log(`  Press Enter to open ${verificationUrl}`);
-      console.log(`  (or open it manually and paste the code above)`);
-      console.log('');
-
-      // Wait for Enter (non-blocking — start polling in parallel)
-      const waitForEnter = new Promise<void>((resolve) => {
-        const onData = () => {
-          process.stdin.removeListener('data', onData);
-          if (process.stdin.isRaw === false || !process.stdin.setRawMode) {
-            // Normal line mode — Enter was pressed
-          }
-          tryOpenBrowser();
-          resolve();
-        };
-        process.stdin.once('data', onData);
-        // Auto-resolve after 30s so we don't block forever
-        setTimeout(() => {
-          process.stdin.removeListener('data', onData);
-          resolve();
-        }, 30000);
-      });
-
-      // Don't await — let polling start immediately
-      waitForEnter.catch(() => {});
-    } else {
-      // Non-interactive (piped, CI, agent) — just show the URL
-      console.log(`  Open this URL in your browser:`);
-      console.log(`    ${verificationUrl}`);
-      console.log(`  Then enter the code above.`);
-    }
-
-    console.log('');
-    console.log(`  Waiting for approval (expires in ${Math.floor(expiresIn / 60)} minutes)...`);
-
-    // Poll for approval
-    const deadline = Date.now() + expiresIn * 1000;
-    while (Date.now() < deadline) {
-      await new Promise(r => setTimeout(r, (pollIntervalSec || 5) * 1000));
-
-      const pollRes = await fetch(`${API_URL}/v1/cli/device/poll`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceCode }),
-      });
-
-      if (!pollRes.ok) continue;
-
-      const pollData = await pollRes.json() as any;
-
-      if (pollData.status === 'approved') {
-        saveCredentials({
-          apiKey: pollData.accessToken,
-          plan: pollData.plan || 'free',
-          teamId: pollData.teamId,
-          teamName: pollData.teamName,
-          loggedInAt: new Date().toISOString(),
-        });
-
-        console.log('');
-        console.log('  ✅ Login successful!');
-        if (pollData.teamName) console.log(`     Team: ${pollData.teamName}`);
-        console.log(`     Plan: ${pollData.plan || 'free'}`);
-        console.log('');
-        // Lifecycle telemetry: dashboard linked
-        fireDashboardLinked();
-        // Signal running proxy to pick up new credentials
-        const proxyRunning = await fetch('http://127.0.0.1:4100/health', { signal: AbortSignal.timeout(1000) })
-          .then(r => r.ok).catch(() => false);
-        if (proxyRunning) {
-          console.log('  ☁️  Cloud sync activated (proxy detected and notified).');
-        } else {
-          console.log('  ☁️  Cloud sync will activate on next proxy start.');
-        }
-        console.log('');
-        return;
-      }
-
-      if (pollData.status === 'denied') {
-        console.log('');
-        console.log('  ❌ Login denied.');
-        console.log('');
-        process.exit(1);
-      }
-
-      if (pollData.status === 'expired') {
-        console.log('');
-        console.log('  ⏰ Login expired. Please try again.');
-        console.log('');
-        process.exit(1);
-      }
-
-      // Still pending, continue polling
-      process.stdout.write('.');
-    }
-
-    console.log('');
-    console.log('  ⏰ Login timed out. Please try again.');
-    console.log('');
-    process.exit(1);
-  } catch (err) {
-    console.error('  ❌ Login failed:', err instanceof Error ? err.message : err);
-    process.exit(1);
-  }
-}
 
 // ============================================
 // LOGOUT COMMAND
 // ============================================
 
 function handleLogoutCommand(): void {
-  const creds = loadCredentials();
   clearCredentials();
   console.log('');
-  if (creds?.apiKey) {
-    console.log('  ✅ Logged out successfully.');
-    console.log('     Cloud sync will stop on next proxy restart.');
-  } else {
-    console.log('  ℹ️  Not logged in.');
-  }
+  console.log('  ✅ Credentials cleared.');
   console.log('');
 }
 
-// ============================================
-// UPGRADE COMMAND
-// ============================================
-
-function handleUpgradeCommand(): void {
-  const url = 'https://relayplane.com/pricing';
-  console.log('');
-  console.log('  🚀 Opening pricing page...');
-  console.log(`     ${url}`);
-  console.log('');
-
-  try {
-    const { exec: execCmd } = require('child_process');
-    const openCmd = process.platform === 'darwin' ? 'open' 
-      : process.platform === 'win32' ? 'start' 
-      : 'xdg-open';
-    execCmd(`${openCmd} "${url}"`);
-  } catch {}
-}
 
 // ============================================
 // ENHANCED STATUS COMMAND  
 // ============================================
 
 async function handleCloudStatusCommand(): Promise<void> {
-  const creds = loadCredentials();
-  
   console.log('');
-  console.log('  📊 RelayPlane Status');
-  console.log('  ════════════════════');
+  console.log('  📊 Proxy Status');
+  console.log('  ═══════════════');
   console.log('');
-  
-  // Proxy status
+
   let proxyReachable = false;
   try {
     const controller = new AbortController();
@@ -386,63 +146,19 @@ async function handleCloudStatusCommand(): Promise<void> {
   } catch {}
 
   console.log(`  Proxy:       ${proxyReachable ? '🟢 Running' : '🔴 Stopped'}`);
+  console.log(`  Mode:        Local only`);
 
-  // Autostart status
   const rpConfig = loadRelayplaneConfig();
   if (rpConfig.autostart) {
     console.log(`  Autostart:   ✅ Enabled`);
   }
-  
-  // Auth status
-  if (creds?.apiKey) {
-    console.log(`  Account:     ✅ Logged in${creds.email ? ` (${creds.email})` : ''}`);
-    console.log(`  Plan:        ${creds.plan || 'free'}`);
-    console.log(`  API Key:     ••••${creds.apiKey.slice(-4)}`);
-    
-    // Check cloud sync
-    if (proxyReachable) {
-      console.log(`  Cloud sync:  ☁️  Active`);
-    } else {
-      console.log(`  Cloud sync:  ⏸️  Proxy not running`);
-    }
-    
-    // Try to get fresh plan info from API
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-      const res = await fetch(`${API_URL}/v1/cli/teams/current`, {
-        signal: controller.signal,
-        headers: { 'Authorization': `Bearer ${creds.apiKey}` },
-      });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const data = await res.json() as any;
-        if (data.plan && data.plan !== creds.plan) {
-          creds.plan = data.plan;
-          saveCredentials(creds);
-          console.log(`  Plan (live):  ${data.plan}`);
-        }
-        if (data.teamName) console.log(`  Team:        ${data.teamName}`);
-      }
-    } catch {}
-  } else {
-    console.log(`  Account:     ❌ Not logged in`);
-    console.log(`  Plan:        free (local only)`);
-    console.log(`  Cloud sync:  ❌ Disabled`);
-  }
-  
-  console.log('');
-  if (!creds?.apiKey) {
-    console.log('  Run `relayplane login` to enable cloud features.');
-  } else if (creds.plan === 'free') {
-    console.log('  Run `relayplane upgrade` to unlock cloud dashboard.');
-  }
+
   console.log('');
 }
 
 function printHelp(): void {
   console.log(`
-RelayPlane Proxy - Intelligent AI Model Routing
+Local LLM Proxy - Intelligent AI Model Routing
 
 Usage:
   npx @relayplane/proxy [command] [options]
@@ -453,7 +169,7 @@ Commands:
   init                   Initialize config files
   login                  Log in to RelayPlane (opens browser)
   logout                 Clear stored credentials
-  status                 Show proxy status, plan, and cloud sync
+  status                 Show proxy status
   upgrade                Open pricing page in browser
   enable                 Enable RelayPlane proxy routing
   disable                Disable RelayPlane proxy routing (passthrough mode)
@@ -501,12 +217,11 @@ Example:
   # ANTHROPIC_BASE_URL=http://localhost:4100 your-agent
   # OPENAI_BASE_URL=http://localhost:4100/v1 your-agent
 
-Learn more: https://relayplane.com/docs
 `);
 }
 
 function printVersion(): void {
-  console.log(`RelayPlane Proxy v${VERSION}`);
+  console.log(`Local LLM Proxy v${VERSION}`);
 }
 
 function handleTelemetryCommand(args: string[]): void {
@@ -787,7 +502,7 @@ async function handleAutostartCommand(args: string[]): Promise<void> {
     ].join('\n');
 
     const serviceContent = `[Unit]
-Description=RelayPlane Proxy - Intelligent AI Model Routing
+Description=Local LLM Proxy - Intelligent AI Model Routing
 After=network.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
@@ -1112,7 +827,7 @@ $1`);
           `EnvironmentFile=-${serviceHome}/.relayplane/.env`,
         ].join('\n');
         serviceContent = `[Unit]
-Description=RelayPlane Proxy - Intelligent AI Model Routing
+Description=Local LLM Proxy - Intelligent AI Model Routing
 After=network.target
 StartLimitIntervalSec=300
 StartLimitBurst=5
@@ -1438,18 +1153,8 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
-  if (command === 'login') {
-    await handleLoginCommand();
-    process.exit(0);
-  }
-
   if (command === 'logout') {
     handleLogoutCommand();
-    process.exit(0);
-  }
-
-  if (command === 'upgrade') {
-    handleUpgradeCommand();
     process.exit(0);
   }
 
@@ -1516,7 +1221,12 @@ async function main(): Promise<void> {
       }
       i++;
     } else if (arg === '--host' && args[i + 1]) {
-      host = args[i + 1]!;
+      const requestedHost = args[i + 1]!;
+      if (requestedHost !== '127.0.0.1' && requestedHost !== 'localhost' && requestedHost !== '::1') {
+        console.error(`Error: Binding to ${requestedHost} is not allowed. The proxy only binds to loopback (127.0.0.1) for security.`);
+        process.exit(1);
+      }
+      host = requestedHost;
       i++;
     } else if (arg === '-v' || arg === '--verbose') {
       verbose = true;
@@ -1531,13 +1241,8 @@ async function main(): Promise<void> {
   setAuditMode(audit);
   setOfflineMode(offline);
 
-  // First run disclosure
   if (isFirstRun()) {
-    printTelemetryDisclosure();
     markFirstRunComplete();
-    
-    // Wait for user to read (brief pause)
-    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   // Auto-load .env file (cwd first, then home directory) so keys set in .env work without manual export
@@ -1573,18 +1278,14 @@ async function main(): Promise<void> {
   const hasMoonshotKey = !!process.env['MOONSHOT_API_KEY'];
 
   if (!hasAnthropicKey && !hasOpenAIKey && !hasGeminiKey && !hasXAIKey && !hasOpenRouterKey && !hasDeepSeekKey && !hasGroqKey && !hasMoonshotKey) {
-    console.error('Error: No API keys found. Set at least one of:');
-    console.error('  ANTHROPIC_API_KEY, OPENAI_API_KEY, GEMINI_API_KEY, XAI_API_KEY,');
-    console.error('  OPENROUTER_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, MOONSHOT_API_KEY');
-    console.error('');
-    console.error('Tip: Keys can be set in a .env file in your current directory or home folder.');
-    process.exit(1);
+    console.log('  Note: No API keys found in environment. The proxy will use keys from incoming request headers (passthrough mode).');
+    console.log('');
   }
 
   // Print startup info
   console.log('');
   console.log('  ╭─────────────────────────────────────────╮');
-  console.log(`  │       RelayPlane Proxy v${VERSION}          │`);
+  console.log(`  │       Local LLM Proxy v${VERSION}          │`);
   console.log('  │    Intelligent AI Model Routing         │');
   console.log('  ╰─────────────────────────────────────────╯');
   console.log('');
@@ -1603,12 +1304,7 @@ async function main(): Promise<void> {
     console.log('    📴 Telemetry disabled');
   }
 
-  // Cloud sync status
-  if (creds?.apiKey && !offline) {
-    console.log(`    ☁️  Cloud sync: active (plan: ${creds.plan || 'free'})`);
-  } else if (!creds?.apiKey) {
-    console.log('    💻 Local only (run `relayplane login` for cloud sync)');
-  }
+  console.log('    💻 Local only');
   
   console.log('');
   console.log('  Providers:');
@@ -1630,12 +1326,6 @@ async function main(): Promise<void> {
     console.log(`    OPENAI_BASE_URL=http://localhost:${port} your-agent`);
     console.log('');
 
-    // Non-blocking update check (fires after startup, doesn't delay anything)
-    if (!offline) {
-      checkForUpdate().then(msg => {
-        if (msg) console.log(msg);
-      });
-    }
   } catch (err) {
     console.error('Failed to start proxy:', err);
     process.exit(1);

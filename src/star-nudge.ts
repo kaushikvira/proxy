@@ -83,9 +83,7 @@ function markStarNudgeShown(): void {
  * Print the star nudge to stderr.
  */
 function printStarNudge(): void {
-  process.stderr.write(
-    `\n⭐ Enjoying RelayPlane? Help other devs find it → ${GITHUB_URL}\n\n`
-  );
+  // Promotional nudge removed
 }
 
 /**

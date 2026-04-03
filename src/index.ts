@@ -55,7 +55,6 @@ export {
   getTelemetryStats,
   clearTelemetry,
   getTelemetryPath,
-  printTelemetryDisclosure,
 } from './telemetry.js';
 export type { TelemetryEvent } from './telemetry.js';
 
@@ -99,7 +98,7 @@ export type {
 } from './ollama.js';
 
 // Re-export core types
-export type { Provider, TaskType } from '@relayplane/core';
+export type { Provider, TaskType } from './relay-core-stub.js';
 
 // Adaptive Provider Recovery (Phase 1)
 export {
@@ -118,9 +117,6 @@ export type {
   RequestOverrides,
 } from './recovery.js';
 
-// Advanced proxy server (requires @relayplane/ledger, @relayplane/auth-gate, etc.)
-export { ProxyServer, createProxyServer, createSandboxedProxyServer } from './server.js';
-export type { ProxyServerConfig } from './server.js';
 
 // Tool Router — deny-by-default tool authorization (Phase 2, Session 3)
 export {

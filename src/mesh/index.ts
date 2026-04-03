@@ -10,13 +10,11 @@ import { join } from 'node:path';
 import { MeshStore } from './store.js';
 import { captureRequest } from './capture.js';
 import { recalculateFitness } from './fitness.js';
-import { MeshSyncManager, syncWithMesh } from './sync.js';
 import type { CaptureEvent, SyncResult } from './types.js';
 
 export { MeshStore } from './store.js';
 export { captureRequest } from './capture.js';
 export { computeFitness, recalculateFitness } from './fitness.js';
-export { pushToMesh, pullFromMesh, syncWithMesh, MeshSyncManager } from './sync.js';
 export type { KnowledgeAtom, CaptureEvent, SyncResult } from './types.js';
 
 export interface MeshConfig {
@@ -28,10 +26,10 @@ export interface MeshConfig {
 }
 
 export const DEFAULT_MESH_CONFIG: MeshConfig = {
-  enabled: true,
-  endpoint: 'https://osmosis-mesh-dev.fly.dev',
+  enabled: false,
+  endpoint: '',
   sync_interval_ms: 60000,
-  contribute: true,
+  contribute: false,
 };
 
 export interface MeshHandle {
@@ -84,13 +82,6 @@ export function initMeshLayer(config: MeshConfig, apiKey?: string): MeshHandle {
     return noopHandle;
   }
 
-  // Start sync manager if contributing
-  let syncManager: MeshSyncManager | null = null;
-  if (config.contribute) {
-    syncManager = new MeshSyncManager(store, config.endpoint, config.sync_interval_ms, apiKey);
-    syncManager.start();
-    console.log(`[MESH] Sync started (interval: ${config.sync_interval_ms / 1000}s, endpoint: ${config.endpoint})`);
-  }
 
   // Periodic fitness recalculation (every 5 min)
   const fitnessTimer = setInterval(() => {
@@ -114,20 +105,16 @@ export function initMeshLayer(config: MeshConfig, apiKey?: string): MeshHandle {
         enabled: true,
         atoms_local: store.count(),
         atoms_synced: store.countSynced(),
-        last_sync: syncManager?.getLastSyncTime() ?? store.getLastSyncTime(config.endpoint),
-        endpoint: config.endpoint,
+        last_sync: null,
+        endpoint: '',
       };
     },
 
     async forceSync(): Promise<SyncResult> {
-      if (syncManager) {
-        return syncManager.doSync();
-      }
-      return syncWithMesh(store, config.endpoint, apiKey);
+      return { pushed: 0, pulled: 0, deduped: 0, errors: ['Cloud sync removed'], timestamp: new Date().toISOString() };
     },
 
     stop() {
-      syncManager?.stop();
       clearInterval(fitnessTimer);
       try { store.close(); } catch {}
     },
