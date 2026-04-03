@@ -79,7 +79,7 @@ export function getLiveSessionHTML(): string {
 
   /* Main content area */
   .content {
-    flex: 1; overflow-y: auto; padding: 16px 20px; max-width: 1400px; width: 100%;
+    flex: 1; overflow-y: auto; padding: 16px 20px; width: 100%;
     margin: 0 auto;
   }
 
