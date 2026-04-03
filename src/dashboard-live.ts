@@ -14,15 +14,15 @@ export function getLiveSessionHTML(): string {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-    background: #0d1117; color: #c9d1d9; line-height: 1.5; overflow: hidden;
-    height: 100vh; display: flex; flex-direction: column;
+    background: #0d1117; color: #c9d1d9; line-height: 1.5;
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
   }
   a { color: #58a6ff; text-decoration: none; }
 
   /* Header */
   .header {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 12px 20px; border-bottom: 1px solid #21262d; background: #161b22;
+    padding: 8px 20px; border-bottom: 1px solid #21262d; background: #161b22; max-height: 40px;
     flex-shrink: 0;
   }
   .header h1 { font-size: 16px; font-weight: 600; }
@@ -58,18 +58,39 @@ export function getLiveSessionHTML(): string {
     50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(63,185,80,0); }
   }
 
+  /* Instrument panel */
+  .instruments {
+    display: flex; gap: 2px; padding: 8px 16px;
+    background: #0d1117; border-bottom: 1px solid #21262d;
+    flex-shrink: 0; overflow-x: auto;
+  }
+  .gauge {
+    flex: 1; min-width: 160px; padding: 6px 12px;
+    background: #161b22; border-radius: 6px; font-size: 11px;
+  }
+  .gauge-label { color: #8b949e; margin-bottom: 2px; }
+  .gauge-value { font-size: 14px; font-weight: 600; color: #e6edf3; }
+  .gauge-detail { font-size: 10px; color: #6e7681; margin-top: 1px; }
+  .gauge-bar { height: 4px; border-radius: 2px; background: #21262d; margin-top: 4px; overflow: hidden; }
+  .gauge-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+  .gauge-bar-fill.green { background: #3fb950; }
+  .gauge-bar-fill.yellow { background: #d29922; }
+  .gauge-bar-fill.red { background: #f85149; }
+
   /* Main content area */
   .content {
-    flex: 1; overflow-y: auto; padding: 16px 20px;
+    flex: 1; overflow-y: auto; padding: 16px 20px; max-width: 1400px; width: 100%;
+    margin: 0 auto;
   }
 
   /* Request card */
   .request-card {
-    border: 1px solid #21262d; border-radius: 6px; margin-bottom: 10px;
+    border: 1px solid #21262d; border-radius: 6px; margin-bottom: 12px;
     background: #161b22; overflow: hidden;
+    border-top: 1px solid #30363d;
   }
   .request-header {
-    display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
     font-size: 13px; cursor: pointer; flex-wrap: wrap;
   }
   .request-header:hover { background: #1c2128; }
@@ -87,7 +108,7 @@ export function getLiveSessionHTML(): string {
   .thinking-block {
     margin: 8px 14px; padding: 10px 14px; border-radius: 6px;
     background: #1c1c2e; border-left: 3px solid #2d2d44;
-    max-height: 400px; overflow-y: auto;
+    overflow-y: auto;
   }
   .thinking-block.streaming { border-left-color: #8957e5; }
   .thinking-label {
@@ -103,7 +124,7 @@ export function getLiveSessionHTML(): string {
   .response-block {
     margin: 8px 14px; padding: 10px 14px; border-radius: 6px;
     background: #0d1117; border: 1px solid #21262d;
-    max-height: 300px; overflow-y: auto;
+    overflow-y: auto;
   }
   .response-text {
     font-size: 13px; white-space: pre-wrap; word-break: break-word;
@@ -113,7 +134,7 @@ export function getLiveSessionHTML(): string {
   /* Tool call */
   .tool-call {
     margin: 4px 14px; padding: 8px 12px; border-radius: 4px;
-    background: #0d1117; border: 1px solid #21262d; font-size: 12px;
+    background: #0d1117; border: 1px solid #21262d; font-size: 12px; line-height: 1.6;
   }
   .tool-name {
     color: #d2a8ff; font-weight: 600; margin-right: 8px;
@@ -155,7 +176,7 @@ export function getLiveSessionHTML(): string {
 
   /* --- New QoL styles --- */
   .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 10px; font-weight: 600; margin-left: 4px; color: #0d1117; }
-  .tool-call-rich { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #161b22; font-size: 12px; }
+  .tool-call-rich { display: flex; align-items: baseline; gap: 6px; padding: 4px 8px; margin: 2px 0; border-radius: 4px; background: #161b22; font-size: 12px; line-height: 1.6; }
   .tool-icon { flex-shrink: 0; }
   .tool-display-name { color: #ffa657; font-weight: 600; min-width: 50px; }
   .tool-summary { color: #8b949e; word-break: break-all; }
@@ -175,7 +196,7 @@ export function getLiveSessionHTML(): string {
   .context-body.open { display: block; }
   .context-section { margin: 8px 0; }
   .context-section-title { font-size: 11px; color: #8b949e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .context-pre { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 8px; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; color: #c9d1d9; }
+  .context-pre { background: #0d1117; border: 1px solid #21262d; border-radius: 4px; padding: 8px; font-family: 'SF Mono', Menlo, monospace; font-size: 11px; white-space: pre-wrap; word-break: break-word; max-height: 500px; overflow-y: auto; color: #c9d1d9; }
   .auth-reveal { background: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer; color: #8b949e; }
   .auth-reveal:hover { color: #c9d1d9; border-color: #58a6ff; }
   .tool-def-list { font-size: 11px; color: #8b949e; max-height: 200px; overflow-y: auto; }
@@ -193,6 +214,7 @@ export function getLiveSessionHTML(): string {
   </div>
 </div>
 <div class="tabs" id="tabs"></div>
+<div class="instruments" id="instruments"></div>
 <div class="content" id="content">
   <div class="empty-state">
     <h2>No sessions yet</h2>
@@ -627,7 +649,97 @@ export function getLiveSessionHTML(): string {
     return html;
   }
 
+  function renderInstruments() {
+    var el = document.getElementById('instruments');
+    if (!el || !activeSessionId || !sessions[activeSessionId]) {
+      if (el) el.innerHTML = '';
+      return;
+    }
+    var sess = sessions[activeSessionId];
+    var reqs = getAllRequests(sess);
+    if (reqs.length === 0) { el.innerHTML = ''; return; }
+
+    // Latest request is the last in the array (newest appended at end)
+    var lastReq = reqs[reqs.length - 1];
+    var totalCost = sess.totalCost || 0;
+    var totalIn = 0, totalOut = 0, totalThinking = 0, totalCacheRead = 0, totalCacheCreate = 0;
+    var now = Date.now();
+    var recentCost = 0;
+
+    for (var i = 0; i < reqs.length; i++) {
+      var r = reqs[i];
+      totalIn += r.tokensIn || 0;
+      totalOut += r.tokensOut || 0;
+      totalThinking += r.thinkingTokens || 0;
+      totalCacheRead += r.cacheReadTokens || 0;
+      totalCacheCreate += r.cacheCreationTokens || 0;
+      var reqTime = new Date(r.timestamp).getTime();
+      if (now - reqTime < 60000) recentCost += r.costUsd || 0;
+    }
+
+    // Context gauge (latest request tokensIn = total context sent)
+    var contextTokens = lastReq.tokensIn || 0;
+    var contextPct = Math.min(contextTokens / 1000000 * 100, 100);
+    var contextColor = contextPct < 50 ? 'green' : contextPct < 80 ? 'yellow' : 'red';
+
+    // Cache rate
+    var cacheRate = totalIn > 0 ? (totalCacheRead / totalIn * 100) : 0;
+    var cacheSavings = totalCacheRead / 1000000 * 15 * 0.9;
+
+    // Thinking
+    var lastThinking = lastReq.thinkingTokens || 0;
+    var avgThinking = reqs.length > 0 ? Math.round(totalThinking / reqs.length) : 0;
+
+    // Throughput
+    var lastTokPerSec = lastReq.latencyMs > 0 ? Math.round((lastReq.tokensOut || 0) / (lastReq.latencyMs / 1000)) : 0;
+    var avgLatency = 0;
+    for (var j = 0; j < reqs.length; j++) avgLatency += reqs[j].latencyMs || 0;
+    avgLatency = reqs.length > 0 ? Math.round(avgLatency / reqs.length / 1000 * 10) / 10 : 0;
+
+    var html = '';
+
+    // Context gauge
+    html += '<div class="gauge">';
+    html += '<div class="gauge-label">\\ud83d\\udcca Context Window</div>';
+    html += '<div class="gauge-value">' + contextPct.toFixed(1) + '% of 1M</div>';
+    html += '<div class="gauge-detail">' + formatTokenCount(contextTokens) + ' input tokens (last req)</div>';
+    html += '<div class="gauge-bar"><div class="gauge-bar-fill ' + contextColor + '" style="width:' + contextPct + '%"></div></div>';
+    html += '</div>';
+
+    // Cost velocity
+    html += '<div class="gauge">';
+    html += '<div class="gauge-label">\\ud83d\\udcb0 Cost</div>';
+    html += '<div class="gauge-value">$' + recentCost.toFixed(3) + '/min</div>';
+    html += '<div class="gauge-detail">Session total: $' + totalCost.toFixed(4) + '</div>';
+    html += '</div>';
+
+    // Cache rate
+    html += '<div class="gauge">';
+    html += '<div class="gauge-label">\\ud83d\\udcbe Cache</div>';
+    html += '<div class="gauge-value">' + cacheRate.toFixed(0) + '% hit rate</div>';
+    html += '<div class="gauge-detail">Saved ~$' + cacheSavings.toFixed(3) + ' \\u00b7 ' + formatTokenCount(totalCacheRead) + ' cached</div>';
+    html += '<div class="gauge-bar"><div class="gauge-bar-fill green" style="width:' + Math.min(cacheRate, 100) + '%"></div></div>';
+    html += '</div>';
+
+    // Thinking
+    html += '<div class="gauge">';
+    html += '<div class="gauge-label">\\ud83e\\udde0 Thinking</div>';
+    html += '<div class="gauge-value">' + formatTokenCount(lastThinking) + ' last req</div>';
+    html += '<div class="gauge-detail">Avg: ' + formatTokenCount(avgThinking) + '/req \\u00b7 Total: ' + formatTokenCount(totalThinking) + '</div>';
+    html += '</div>';
+
+    // Throughput
+    html += '<div class="gauge">';
+    html += '<div class="gauge-label">\\u26a1 Throughput</div>';
+    html += '<div class="gauge-value">' + lastTokPerSec + ' tok/s</div>';
+    html += '<div class="gauge-detail">Avg latency: ' + avgLatency + 's \\u00b7 ' + reqs.length + ' requests</div>';
+    html += '</div>';
+
+    el.innerHTML = html;
+  }
+
   function renderContent() {
+    renderInstruments();
     var contentEl = document.getElementById('content');
     if (!activeSessionId || !sessions[activeSessionId]) {
       contentEl.innerHTML = '<div class="empty-state"><h2>No sessions yet</h2><p>Waiting for proxy requests...</p></div>';
@@ -834,6 +946,7 @@ export function getLiveSessionHTML(): string {
       var data = JSON.parse(e.data);
       var traceId = data.traceId || data.id;
       delete streamingRequests[traceId];
+      renderInstruments();
       // session.updated or request.captured will provide the final data
     });
 
