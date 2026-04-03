@@ -13,6 +13,13 @@ interface RequestMetadata {
   userMessage: string;
   tools: string[];
   agentFingerprint: string;
+  // New:
+  systemPrompt?: string;
+  toolDefinitions?: { name: string; description: string }[];
+  authType?: 'oauth' | 'api-key' | 'none';
+  authKeyPreview?: string;
+  thinkingConfig?: string;
+  maxTokens?: number;
 }
 
 interface ResponseMetadata {
@@ -51,9 +58,18 @@ export class StreamAccumulator {
   }
 
   onToolCall(name: string, inputJson: string): void {
-    const record: ToolCallRecord = { name, inputPreview: inputJson.slice(0, 200), outputPreview: '' };
+    const record: ToolCallRecord = {
+      name,
+      inputPreview: inputJson.slice(0, 200),
+      inputFull: inputJson,
+      outputPreview: '',
+    };
     this.toolCallList.push(record);
-    getLiveEventBus().emit('stream.tool_call', { traceId: this.traceId, name, inputPreview: record.inputPreview });
+    getLiveEventBus().emit('stream.tool_call', {
+      traceId: this.traceId, name,
+      inputPreview: record.inputPreview,
+      inputFull: inputJson
+    });
   }
 
   setRequestMetadata(meta: RequestMetadata): void { this.reqMeta = meta; }
@@ -87,6 +103,12 @@ export class StreamAccumulator {
       success: this.resMeta?.success ?? false,
       finishReason: this.resMeta?.finishReason ?? '',
       error: null,
+      systemPrompt: this.reqMeta?.systemPrompt,
+      toolDefinitions: this.reqMeta?.toolDefinitions,
+      authType: this.reqMeta?.authType,
+      authKeyPreview: this.reqMeta?.authKeyPreview,
+      thinkingConfig: this.reqMeta?.thinkingConfig,
+      maxTokens: this.reqMeta?.maxTokens,
     };
 
     getSessionTree().addRequest(req);

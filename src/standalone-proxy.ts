@@ -3490,6 +3490,26 @@ load();
 </script></body></html>`;
 }
 
+function maskApiKey(key?: string): string {
+  if (!key) return '';
+  if (key.length <= 16) return '****';
+  return key.slice(0, 12) + '****...' + key.slice(-4);
+}
+
+function extractBearerToken(authHeader?: string): string | undefined {
+  if (!authHeader) return undefined;
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  return match?.[1];
+}
+
+function formatThinkingConfig(thinking: unknown): string {
+  if (!thinking || typeof thinking !== 'object') return 'disabled';
+  const t = thinking as Record<string, unknown>;
+  const type = String(t.type ?? 'unknown');
+  if (t.budget_tokens) return `${type}:${t.budget_tokens}`;
+  return type;
+}
+
 /**
  * Start the RelayPlane proxy server
  */
@@ -5678,6 +5698,17 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
               userMessage: extractPromptText(requestBody['messages'] as any[] || []).slice(0, 500),
               tools: Array.isArray(requestBody['tools']) ? (requestBody['tools'] as any[]).map((t: any) => t?.name ?? '').filter(Boolean) : [],
               agentFingerprint: nativeAgentFingerprint ?? '',
+              // Extended metadata
+              systemPrompt: nativeSystemPrompt ?? '',
+              toolDefinitions: Array.isArray(requestBody['tools'])
+                ? (requestBody['tools'] as any[])
+                    .filter((t: any) => t?.name)
+                    .map((t: any) => ({ name: String(t.name), description: String(t.description ?? '').slice(0, 200) }))
+                : [],
+              authType: ctx.authHeader ? 'oauth' as const : ctx.apiKeyHeader ? 'api-key' as const : 'none' as const,
+              authKeyPreview: maskApiKey(ctx.apiKeyHeader || extractBearerToken(ctx.authHeader)),
+              thinkingConfig: formatThinkingConfig(requestBody['thinking']),
+              maxTokens: typeof requestBody['max_tokens'] === 'number' ? requestBody['max_tokens'] as number : undefined,
             });
             let streamTokensIn = 0;
             let streamTokensOut = 0;

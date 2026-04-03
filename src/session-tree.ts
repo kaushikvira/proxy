@@ -6,6 +6,7 @@
 export interface ToolCallRecord {
   name: string;
   inputPreview: string;
+  inputFull?: string;      // full JSON for rich client-side parsing
   outputPreview: string;
 }
 
@@ -33,6 +34,13 @@ export interface CapturedRequest {
   success: boolean;
   finishReason: string;
   error: string | null;
+  // Extended metadata (optional for backward compat)
+  systemPrompt?: string;
+  toolDefinitions?: { name: string; description: string }[];
+  authType?: 'oauth' | 'api-key' | 'none';
+  authKeyPreview?: string;
+  thinkingConfig?: string;
+  maxTokens?: number;
 }
 
 export interface SessionNode {
