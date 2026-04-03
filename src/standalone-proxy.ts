@@ -83,6 +83,7 @@ import { writeEpisode } from './episode-writer.js';
 import { getSessionId, upsertSession, getSessions, getActiveSessions } from './session-tracker.js';
 import { TraceWriter, sha256Hex, defaultTracesConfig } from './trace-writer.js';
 import { getLiveEventBus } from './live-events.js';
+import { getTokenTracker } from './token-tracker.js';
 import { getSessionTree } from './session-tree.js';
 import { startStream, endStream, getStream } from './capture.js';
 import { getLiveSessionHTML } from './dashboard-live.js';
@@ -4625,6 +4626,14 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
     }
 
     // Session list API
+    // Token rotation stats
+    if (req.method === 'GET' && pathname === '/api/token-stats') {
+      const stats = getTokenTracker().getStats();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(stats));
+      return;
+    }
+
     if (req.method === 'GET' && pathname === '/api/sessions') {
       const sessions = getSessionTree().getSessions();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5710,6 +5719,8 @@ export async function startProxy(config: ProxyConfig = {}): Promise<http.Server>
               thinkingConfig: formatThinkingConfig(requestBody['thinking']),
               maxTokens: typeof requestBody['max_tokens'] === 'number' ? requestBody['max_tokens'] as number : undefined,
             });
+            // Track auth token rotation
+            getTokenTracker().observe(ctx.apiKeyHeader || extractBearerToken(ctx.authHeader) || '');
             let streamTokensIn = 0;
             let streamTokensOut = 0;
             let streamCacheCreation = 0;
