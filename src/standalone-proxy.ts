@@ -3128,6 +3128,7 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
   <div class="card"><div class="label">Routing Savings <span class="tooltip-wrap"><span class="info-icon">ⓘ</span><span class="tooltip-box" id="savings-tooltip">Loading...</span></span></div><div class="value green" id="savings">—</div><div id="savings-detail" style="font-size:.75rem;color:#64748b;margin-top:4px">—</div></div>
   <div class="card"><div class="label">Avg Latency</div><div class="value" id="avgLat">—</div><div id="avgLatDetail" style="font-size:.75rem;color:#64748b;margin-top:4px">—</div></div>
 </div>
+<div class="section" id="token-rotation-section"><h2>Token Rotation</h2><div id="token-rotation-panel"></div></div>
 <div class="section collapsible collapsed"><h2>Model Breakdown <span style="font-size:.75rem;color:#64748b;font-weight:400">(7d window, history-capped)</span></h2>
 <table><thead><tr><th>Provider</th><th>Model</th><th>Requests</th><th>Cost</th><th>% of Total Cost</th></tr></thead><tbody id="models"></tbody></table></div>
 <div class="section collapsible collapsed"><h2>Agent Cost Breakdown</h2>
@@ -3137,8 +3138,6 @@ td{padding:8px 12px;border-bottom:1px solid #111318}
 <div class="section collapsible" id="sessions-section"><h2>Sessions <span id="sessionsLabel" style="font-size:.75rem;color:#64748b;font-weight:400">(last 7d)</span></h2>
 <table><thead><tr><th>Session ID</th><th>Source</th><th>Started</th><th>Duration</th><th>Requests</th><th>Tokens In</th><th>Tokens Out</th><th>Cost</th><th>Models</th><th>Status</th></tr></thead><tbody id="sessions"></tbody></table>
 </div>
-<div class="section collapsible collapsed" id="token-pool-section"><h2>Token Pool</h2><div id="token-pool-panel"></div></div>
-<div class="section collapsible collapsed" id="token-rotation-section"><h2>Token Rotation</h2><div id="token-rotation-panel"></div></div>
 <div class="section"><h2>Recent Runs <span id="historyLabel" style="font-size:.75rem;color:#64748b;font-weight:400">(7d window, history-capped)</span></h2>
 <table><thead><tr><th>Time</th><th>Agent</th><th>Model</th><th class="col-tt">Task Type</th><th class="col-cx">Complexity</th><th>Tokens In</th><th>Tokens Out</th><th class="col-cache">Cache Create</th><th class="col-cache">Cache Read</th><th>Cost</th><th>Latency</th><th>Status</th></tr></thead><tbody id="runs"></tbody></table></div>
 <script>
@@ -3314,27 +3313,6 @@ async function loadLearning(){
     }
   }catch(e){console.error('learning load error',e)}
 }
-async function loadTokenPool(){
-  try{
-    const data=await fetch('/v1/token-pool/status').then(r=>r.json()).catch(()=>null);
-    const el=$('token-pool-panel');
-    if(!el)return;
-    if(!data||!data.accounts||data.accounts.length===0){
-      el.innerHTML='<div style="color:#64748b;font-size:.85rem">No accounts registered. Add accounts under <code style="background:#1e293b;padding:2px 6px;border-radius:4px">providers.anthropic.accounts[]</code> in ~/.kv-local-proxy/config.json for multi-account pooling.</div>';
-      return;
-    }
-    el.innerHTML='<table><thead><tr><th>Label</th><th>Source</th><th>Priority</th><th>Type</th><th>Req/min</th><th>RPM Limit</th><th>Status</th></tr></thead><tbody>'+
-      data.accounts.map(function(a){
-        const rl=a.rateLimitedUntil?'<span class="badge err">rate-limited until '+new Date(a.rateLimitedUntil).toLocaleTimeString()+'</span>':
-          a.available?'<span class="badge ok">available</span>':'<span class="badge err-rate">throttled</span>';
-        const type=a.isOat?'<span style="color:#60a5fa;font-size:.75rem">OAT/Max</span>':'<span style="color:#94a3b8;font-size:.75rem">API key</span>';
-        const src=a.source==='config'?'<span style="color:#34d399;font-size:.75rem">config</span>':'<span style="color:#64748b;font-size:.75rem">auto</span>';
-        const pct=a.knownRpmLimit>0?Math.round(a.requestsThisMinute/a.knownRpmLimit*100):0;
-        const bar='<div style="background:#1e293b;border-radius:4px;height:6px;width:80px;display:inline-block;vertical-align:middle"><div style="background:'+(pct>=90?'#ef4444':pct>=70?'#fbbf24':'#34d399')+';height:100%;border-radius:4px;width:'+Math.min(pct,100)+'%"></div></div>';
-        return '<tr><td>'+esc(a.label)+'</td><td>'+src+'</td><td>'+a.priority+'</td><td>'+type+'</td><td>'+a.requestsThisMinute+' '+bar+'</td><td>'+a.knownRpmLimit+' rpm</td><td>'+rl+'</td></tr>';
-      }).join('')+'</tbody></table>';
-  }catch(e){console.error('token pool load error',e)}
-}
 async function loadTokenRotation(){
   try{
     const d=await fetch('/api/token-stats').then(r=>r.json()).catch(()=>null);
@@ -3359,7 +3337,7 @@ async function loadTokenRotation(){
     el.innerHTML=html;
   }catch(e){console.error('token rotation load error',e)}
 }
-load();loadLearning();loadSessions();loadTokenPool();loadTokenRotation();setInterval(load,5000);setInterval(loadLearning,30000);setInterval(loadSessions,10000);setInterval(loadTokenPool,10000);setInterval(loadTokenRotation,10000);
+load();loadLearning();loadSessions();loadTokenRotation();setInterval(load,5000);setInterval(loadLearning,30000);setInterval(loadSessions,10000);setInterval(loadTokenRotation,10000);
 </script><footer style="text-align:center;padding:20px 0;color:#475569;font-size:.75rem;border-top:1px solid #1e293b;margin-top:20px">🔒 Request content stays on your machine. Never sent to cloud.</footer></body></html>`;
 }
 
