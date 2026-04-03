@@ -1,0 +1,14 @@
+{
+  "device_id": "anon_10740688e0012b68",
+  "telemetry_enabled": true,
+  "first_run_complete": false,
+  "config_version": 1,
+  "created_at": "2026-04-03T18:25:31.779Z",
+  "updated_at": "2026-04-03T18:25:31.780Z",
+  "mesh": {
+    "enabled": false,
+    "endpoint": "",
+    "sync_interval_ms": 60000,
+    "contribute": false
+  }
+}
