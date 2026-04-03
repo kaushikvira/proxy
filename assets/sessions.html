@@ -84,8 +84,8 @@
     border-top: 1px solid #30363d;
   }
   .request-header {
-    display: flex; align-items: center; gap: 10px; padding: 12px 16px;
-    font-size: 13px; cursor: pointer; flex-wrap: wrap;
+    display: flex; align-items: center; gap: 8px; padding: 12px 16px;
+    font-size: 13px; cursor: pointer;
   }
   .request-header:hover { background: #1c2128; }
   .req-time { color: #8b949e; font-size: 12px; flex-shrink: 0; }
@@ -94,6 +94,7 @@
     font-size: 11px; font-weight: 600; flex-shrink: 0;
   }
   .req-message { color: #c9d1d9; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .req-cost-bar-inline { display: inline-flex; height: 6px; width: 60px; border-radius: 3px; overflow: hidden; background: #21262d; flex-shrink: 0; vertical-align: middle; }
   .req-cost { color: #8b949e; font-size: 12px; flex-shrink: 0; }
   .req-tokens { color: #8b949e; font-size: 11px; flex-shrink: 0; }
   .req-error { color: #f85149; }
@@ -645,7 +646,7 @@
     }
   }
 
-  function renderCostBar(req) {
+  function renderInlineCostBar(req) {
     var tin = req.tokensIn || 0;
     var tout = req.tokensOut || 0;
     var tthink = req.thinkingTokens || 0;
@@ -654,16 +655,11 @@
     var pThink = (tthink / total * 100).toFixed(1);
     var pIn = (tin / total * 100).toFixed(1);
     var pOut = (tout / total * 100).toFixed(1);
-    var legend = '<div style="display:flex;gap:12px;font-size:10px;color:#8b949e;margin:0 14px 2px">';
-    if (tthink > 0) legend += '<span><span style="color:#d2a8ff">\u25cf</span> thinking ' + formatTokenCount(tthink) + '</span>';
-    legend += '<span><span style="color:#79c0ff">\u25cf</span> input ' + formatTokenCount(tin) + '</span>';
-    legend += '<span><span style="color:#56d364">\u25cf</span> output ' + formatTokenCount(tout) + '</span>';
-    legend += '</div>';
-    return '<div class="cost-bar">'
-      + '<div class="seg-thinking" style="width:' + pThink + '%"></div>'
-      + '<div class="seg-input" style="width:' + pIn + '%"></div>'
-      + '<div class="seg-output" style="width:' + pOut + '%"></div>'
-      + '</div>' + legend;
+    return '<span class="req-cost-bar-inline">'
+      + '<span class="seg-thinking" style="width:' + pThink + '%;display:inline-block;height:100%"></span>'
+      + '<span class="seg-input" style="width:' + pIn + '%;display:inline-block;height:100%"></span>'
+      + '<span class="seg-output" style="width:' + pOut + '%;display:inline-block;height:100%"></span>'
+      + '</span>';
   }
 
   function renderToolCallRich(tc) {
@@ -724,14 +720,13 @@
     }
 
     html += '<span class="req-message">' + esc(truncate(req.userMessage, 80)) + '</span>';
+    // Inline cost bar between message and cost
+    html += renderInlineCostBar(req);
     if (req.costUsd) html += '<span class="req-cost">' + esc(formatCost(req.costUsd)) + '</span>';
     var tokStr = formatTokens(req.tokensIn, req.tokensOut, req.thinkingTokens);
     if (tokStr) html += '<span class="req-tokens">' + esc(tokStr) + '</span>';
     if (req.error) html += '<span class="req-error"> ERR</span>';
     html += '</div>';
-
-    // Cost bar
-    html += renderCostBar(req);
 
     // Thinking block
     html += renderThinkingBlock(req, isStreaming);
