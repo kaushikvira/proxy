@@ -620,14 +620,7 @@ export function getLiveSessionHTML(): string {
     // Session summary bar
     html += renderSessionSummary(sess);
 
-    // Main agent requests
-    if (sess.requests && sess.requests.length) {
-      for (var i = 0; i < sess.requests.length; i++) {
-        html += renderRequestCard(sess.requests[i], false);
-      }
-    }
-
-    // Streaming requests for this session (not yet finalized)
+    // Streaming requests first (active, happening right now)
     var streamIds = Object.keys(streamingRequests);
     for (var si = 0; si < streamIds.length; si++) {
       var sr = streamingRequests[streamIds[si]];
@@ -645,18 +638,20 @@ export function getLiveSessionHTML(): string {
       }
     }
 
-    // Subagent groups
+    // Main agent requests (newest first)
+    if (sess.requests && sess.requests.length) {
+      for (var i = sess.requests.length - 1; i >= 0; i--) {
+        html += renderRequestCard(sess.requests[i], false);
+      }
+    }
+
+    // Subagent groups (newest first within each group)
     if (sess.children && sess.children.length) {
       for (var c = 0; c < sess.children.length; c++) {
         var child = sess.children[c];
         html += '<div class="subagent-group">';
         html += '<div class="subagent-label">' + esc(child.agentLabel || 'Subagent') + '</div>';
-        if (child.requests) {
-          for (var r = 0; r < child.requests.length; r++) {
-            html += renderRequestCard(child.requests[r], false);
-          }
-        }
-        // Streaming subagent requests
+        // Streaming subagent requests first
         for (var si2 = 0; si2 < streamIds.length; si2++) {
           var sr2 = streamingRequests[streamIds[si2]];
           if (sr2.sessionId === activeSessionId && sr2.parentTraceId && sr2.agentFingerprint === child.agentFingerprint) {
@@ -670,6 +665,12 @@ export function getLiveSessionHTML(): string {
               toolCalls: sr2.toolCalls || [],
               tokensIn: 0, tokensOut: 0, thinkingTokens: 0, costUsd: 0
             }, true);
+          }
+        }
+        // Then completed requests (newest first)
+        if (child.requests) {
+          for (var r = child.requests.length - 1; r >= 0; r--) {
+            html += renderRequestCard(child.requests[r], false);
           }
         }
         html += '</div>';
