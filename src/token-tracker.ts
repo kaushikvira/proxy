@@ -9,9 +9,15 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import * as crypto from 'node:crypto';
+
+function hashToken(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex').slice(0, 16);
+}
 
 interface TokenRotation {
   token: string;
+  tokenHash?: string;     // SHA-256 prefix for cross-restart matching
   firstSeen: number;     // timestamp ms
   lastSeen: number;      // timestamp ms
   requestCount: number;
@@ -56,6 +62,12 @@ class TokenTracker {
           this.history = data.history;
           console.log(`[TOKEN] Loaded ${this.history.length} rotation(s) from disk`);
         }
+        // Restore current token state so age survives restarts
+        if (data.current) {
+          this.current = data.current;
+          const age = formatDuration(Date.now() - data.current.firstSeen);
+          console.log(`[TOKEN] Restored current token (age: ${age}, ${data.current.requestCount} reqs)`);
+        }
       }
     } catch {
       // Start fresh
@@ -67,12 +79,20 @@ class TokenTracker {
       const filePath = getRotationFilePath();
       const dir = path.dirname(filePath);
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-      // Save masked tokens only — never persist full keys
+      // Save masked tokens in history — never persist full keys
       const safeHistory = this.history.map(h => ({
         ...h,
         token: mask(h.token),
       }));
-      fs.writeFileSync(filePath, JSON.stringify({ history: safeHistory }, null, 2), { mode: 0o600 });
+      // Save current token: masked key + hash for matching, real timestamps
+      const safeCurrent = this.current ? {
+        token: mask(this.current.token),
+        tokenHash: hashToken(this.current.token),
+        firstSeen: this.current.firstSeen,
+        lastSeen: this.current.lastSeen,
+        requestCount: this.current.requestCount,
+      } : null;
+      fs.writeFileSync(filePath, JSON.stringify({ history: safeHistory, current: safeCurrent }, null, 2), { mode: 0o600 });
     } catch {
       // Best effort
     }
@@ -86,15 +106,23 @@ class TokenTracker {
 
     if (!this.current) {
       // First token ever seen
-      this.current = { token, firstSeen: now, lastSeen: now, requestCount: 1 };
+      this.current = { token, tokenHash: hashToken(token), firstSeen: now, lastSeen: now, requestCount: 1 };
       console.log(`[TOKEN] First token observed: ${mask(token)}`);
+      this.saveToDisk();
       return;
     }
 
-    if (this.current.token === token) {
-      // Same token, update stats
+    // Compare tokens using hash — works even after restart when current.token is masked
+    const incomingHash = hashToken(token);
+    const isSameToken = this.current.token === token || this.current.tokenHash === incomingHash;
+    if (isSameToken) {
+      // Same token — update stats, upgrade to full key + hash
+      this.current.token = token;
+      this.current.tokenHash = incomingHash;
       this.current.lastSeen = now;
       this.current.requestCount++;
+      // Persist periodically (every 10 requests)
+      if (this.current.requestCount % 10 === 0) this.saveToDisk();
       return;
     }
 
