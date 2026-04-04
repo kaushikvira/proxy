@@ -489,7 +489,7 @@ async function handleAutostartCommand(args: string[]): Promise<void> {
     serviceHome = resolvedAutoHome;
 
     // Capture API keys from current environment for systemd
-    const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 'MOONSHOT_API_KEY'];
+    const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 'MOONSHOT_API_KEY', 'N8N_URL', 'N8N_API_KEY', 'N8N_ANTHROPIC_CREDENTIAL_ID'];
     const envLines = envKeys
       .filter(k => process.env[k])
       .map(k => `Environment=${k}=${process.env[k]}`)
@@ -698,12 +698,13 @@ function getServiceAssetPath(): string {
   return join(__dirname, '..', 'assets', 'relayplane-proxy.service');
 }
 
-function generateLaunchdPlist(binPath: string): string {
-  const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY'];
+function generateLaunchdPlist(args: string[]): string {
+  const envKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'GEMINI_API_KEY', 'XAI_API_KEY', 'N8N_URL', 'N8N_API_KEY', 'N8N_ANTHROPIC_CREDENTIAL_ID'];
   const envDict = envKeys
     .filter(k => process.env[k])
     .map(k => `      <key>${k}</key>\n      <string>${process.env[k]}</string>`)
     .join('\n');
+  const argEntries = args.map(a => `    <string>${a}</string>`).join('\n');
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -713,7 +714,7 @@ function generateLaunchdPlist(binPath: string): string {
   <string>com.kv-local-proxy.proxy</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${binPath}</string>
+${argEntries}
   </array>
   <key>RunAtLoad</key>
   <true/>
@@ -751,16 +752,21 @@ async function handleServiceCommand(args: string[]): Promise<void> {
 
   const { execSync } = require('child_process');
 
-  // Detect binary path
+  // Detect binary path — used for both systemd ExecStart and launchd ProgramArguments
   let binPath: string;
+  let launchdArgs: string[];
   try {
     binPath = execSync('which relayplane', { encoding: 'utf8' }).trim();
+    launchdArgs = [binPath];
   } catch {
     if (isRoot()) {
       console.warn('  ⚠️  Could not find relayplane in PATH (sudo may have stripped it).');
       console.warn('     If the service fails to start, try: sudo env "PATH=$PATH" relayplane service install');
     }
-    binPath = process.argv[0] ?? 'relayplane';
+    // Running as `node dist/cli.js` — pass both node and script path
+    binPath = process.argv[0] ?? 'node';
+    const scriptPath = process.argv[1];
+    launchdArgs = scriptPath ? [binPath, scriptPath] : [binPath];
   }
 
   if (sub === 'install') {
@@ -890,7 +896,7 @@ WantedBy=multi-user.target
     } else if (isMac) {
       const plistPath = join(homedir(), 'Library', 'LaunchAgents', 'com.kv-local-proxy.proxy.plist');
 
-      const plistContent = generateLaunchdPlist(binPath);
+      const plistContent = generateLaunchdPlist(launchdArgs);
 
       if (dryRun) {
         console.log('');

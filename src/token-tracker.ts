@@ -10,9 +10,36 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import * as crypto from 'node:crypto';
+import { pushToN8n } from './n8n-sync.js';
 
 function hashToken(token: string): string {
   return crypto.createHash('sha256').update(token).digest('hex').slice(0, 16);
+}
+
+/** Derive a deterministic AES-256 key from hostname + fixed salt. Same key on every restart. */
+function deriveMachineKey(): Buffer {
+  const material = `relayplane-token-store::${os.hostname()}`;
+  return crypto.createHash('sha256').update(material).digest(); // 32 bytes
+}
+
+function encryptToken(token: string): string {
+  const key = deriveMachineKey();
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+  const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()]);
+  return iv.toString('hex') + ':' + encrypted.toString('hex');
+}
+
+function decryptToken(encrypted: string): string | null {
+  try {
+    const [ivHex, dataHex] = encrypted.split(':');
+    if (!ivHex || !dataHex) return null;
+    const key = deriveMachineKey();
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, Buffer.from(ivHex, 'hex'));
+    return Buffer.concat([decipher.update(Buffer.from(dataHex, 'hex')), decipher.final()]).toString('utf8');
+  } catch {
+    return null;
+  }
 }
 
 interface TokenRotation {
@@ -48,6 +75,8 @@ function getRotationFilePath(): string {
 class TokenTracker {
   private current: TokenRotation | null = null;
   private history: TokenRotation[] = [];
+  /** True once we've validated + synced the current token to n8n after startup */
+  private startupSynced = false;
 
   constructor() {
     this.loadFromDisk();
@@ -67,6 +96,17 @@ class TokenTracker {
           this.current = data.current;
           const age = formatDuration(Date.now() - data.current.firstSeen);
           console.log(`[TOKEN] Restored current token (age: ${age}, ${data.current.requestCount} reqs)`);
+          // Decrypt and sync to n8n immediately on startup
+          const fullToken = data.current.tokenEncrypted
+            ? decryptToken(data.current.tokenEncrypted)
+            : null;
+          if (fullToken && this.current) {
+            this.current.token = fullToken;
+            this.startupSynced = true;
+            pushToN8n(fullToken).catch(() => {});
+          } else {
+            console.log('[TOKEN] No encrypted token on disk — will sync on first request');
+          }
         }
       }
     } catch {
@@ -84,9 +124,10 @@ class TokenTracker {
         ...h,
         token: mask(h.token),
       }));
-      // Save current token: masked key + hash for matching, real timestamps
+      // Save current token: AES-256 encrypted (machine-derived key) + hash for matching
       const safeCurrent = this.current ? {
         token: mask(this.current.token),
+        tokenEncrypted: encryptToken(this.current.token),
         tokenHash: hashToken(this.current.token),
         firstSeen: this.current.firstSeen,
         lastSeen: this.current.lastSeen,
@@ -119,6 +160,11 @@ class TokenTracker {
       // Same token — update stats, upgrade to full key + hash
       this.current.token = token;
       this.current.tokenHash = incomingHash;
+      // First time we see the full token after startup — sync to n8n
+      if (!this.startupSynced) {
+        this.startupSynced = true;
+        pushToN8n(token).catch(() => {});
+      }
       this.current.lastSeen = now;
       this.current.requestCount++;
       // Persist periodically (every 10 requests)
@@ -149,6 +195,7 @@ class TokenTracker {
     this.history.push({ ...this.current });
     this.current = { token, firstSeen: now, lastSeen: now, requestCount: 1 };
     this.saveToDisk();
+    pushToN8n(token).catch(() => {}); // fire-and-forget; errors logged inside
   }
 
   getStats(): TokenStats {

@@ -5,7 +5,7 @@ PORT     := 4100
 
 .DEFAULT_GOAL := help
 
-.PHONY: help build start stop status restart service-install service-uninstall service-restart service-status logs
+.PHONY: help build start stop status restart service-install service-uninstall service-restart service-status logs test-token-rotation
 
 ## Show this help
 help:
@@ -78,6 +78,18 @@ logs:
 	@tail -f ~/Library/Logs/relayplane-proxy.log 2>/dev/null \
 		|| journalctl -u relayplane-proxy -f 2>/dev/null \
 		|| echo "No log file found"
+
+## Force a token rotation on next request (corrupts stored hash, then restarts service)
+test-token-rotation:
+	@python3 -c "\
+import json, os; \
+f = os.path.expanduser('~/.kv-local-proxy/token-rotations.json'); \
+d = json.load(open(f)); \
+assert d.get('current'), 'No current token on disk — send a request through the proxy first'; \
+d['current']['tokenHash'] = '0000000000000000'; \
+open(f, 'w').write(json.dumps(d, indent=2)); \
+print('  Token hash corrupted — rotation will trigger on next request') \
+" && $(MAKE) --no-print-directory service-restart
 
 $(CLI):
 	@echo "dist/ not found — run 'make build' first"; exit 1
